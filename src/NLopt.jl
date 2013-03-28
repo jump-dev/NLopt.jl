@@ -186,7 +186,7 @@ qsym(args...) = Expr(:quote, symbol(string(args...)))
 
 # scalar parameters p of type T
 macro GETSET(T, p)
-    Tg = T == :Cdouble ? :Real : (T == :Cint ? :Integer : :Any)
+    Tg = T == :Cdouble ? :Real : (T == :Cint || T == :Cuint ? :Integer : :Any)
     ps = symbol(string(p, "!"))
     quote 
         $(esc(p))(o::Opt) = ccall(($(qsym("nlopt_get_", p)),:libnlopt),
