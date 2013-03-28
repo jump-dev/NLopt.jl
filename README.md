@@ -174,8 +174,8 @@ a single constant.
 
 To retrieve the values of the lower/upper bounds, you can call one of:
 
-   lower_bounds(opt::Opt)
-   upper_bounds(opt::Opt)
+    lower_bounds(opt::Opt)
+    upper_bounds(opt::Opt)
 
 both of which return `Vector{Float64}` arrays.
 
