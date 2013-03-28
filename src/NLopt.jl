@@ -136,7 +136,12 @@ function copy(o::Opt)
     if p == C_NULL
         error("Error in nlopt_copy")
     end
-    Opt(p)
+    oc = Opt(p)
+    oc.cb = similar(o.cb)
+    for i = 1:length(o.cb)
+        oc.cb[i] = Callback_Data(o.cb[i].f, oc)
+    end
+    return oc
 end
 
 ndims(o::Opt) = int(ccall((:nlopt_get_dimension,:libnlopt), Cuint, (_Opt,), o))
