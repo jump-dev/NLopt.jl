@@ -131,25 +131,71 @@ convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
 
 destroy(o::Opt) = ccall((:nlopt_destroy,:libnlopt), Void, (_Opt,), o)
 
-function copy(o::Opt)
-    p = ccall((:nlopt_copy,:libnlopt), _Opt, (_Opt,), o)
-    if p == C_NULL
-        error("Error in nlopt_copy")
-    end
-    oc = Opt(p)
-    oc.cb = similar(o.cb)
-    for i = 1:length(o.cb)
-        oc.cb[i] = Callback_Data(o.cb[i].f, oc)
-    end
-    return oc
-end
-
 ndims(o::Opt) = int(ccall((:nlopt_get_dimension,:libnlopt), Cuint, (_Opt,), o))
 algorithm(o::Opt) = int2alg[ccall((:nlopt_get_algorithm,:libnlopt),
                                   Cenum, (_Opt,), o)]
 
 show(io::IO, o::Opt) = print(io, "Opt(:$(algorithm(o)), $(ndims(o)))")
 
+############################################################################
+# copying is a little tricky because we have to tell NLopt to use
+# new Callback_Data.
+
+# callback wrapper for nlopt_munge_data in NLopt 2.4
+function munge_callback(p::Ptr{Void}, f_::Ptr{Void})
+    f = unsafe_pointer_to_objref(f_)::Function
+    f(p)::Ptr{Void}
+end
+
+function copy(o::Opt)
+    p = ccall((:nlopt_copy,:libnlopt), _Opt, (_Opt,), o)
+    if p == C_NULL
+        error("Error in nlopt_copy")
+    end
+    n = Opt(p)
+
+    n.cb = similar(o.cb)
+    for i = 1:length(o.cb)
+        try
+            n.cb[i] = Callback_Data(o.cb[i].f, n)
+        catch e
+            # if objective has not been set, o.cb[1] will throw
+            # an UndefRefError, which is okay.
+            if i != 1 || !isa(e, UndefRefError)
+                rethrow(e) # some not-okay exception
+            end
+        end
+    end
+
+    try
+        # n.o, for each callback, stores a pointer to an element of o.cb,
+        # and we need to convert this into a pointer to the corresponding
+        # element of n.cb.  nlopt_munge_data allows us to call a function
+        # to transform each stored pointer in n.o, and we use the cbi
+        # dictionary to convert pointers to indices into o.cb, whence
+        # we obtain the corresponding element of n.cb.
+        cbi = (Ptr{Void}=>Int)[ pointer_from_objref(try o.cb[i]
+                                                    catch nothing; end)=>i
+                                for i in 1:length(o.cb) ]
+        ccall((:nlopt_munge_data,:libnlopt), Void, (_Opt, Ptr{Void}, Any),
+              n, cfunction(munge_callback, Ptr{Void}, (Ptr{Void}, Ptr{Void})),
+              p::Ptr{Void} -> p==C_NULL ? C_NULL : 
+                              pointer_from_objref(n.cb[cbi[p]]))
+    catch e0
+        # nlopt_munge_data not available, punt unless there is
+        # no callback data
+        try
+            o.cb[1]
+        catch e
+            if length(o.cb) == 1 && isa(e, UndefRefError)
+                return n
+            end
+        end
+        error("copy(o::Opt) not supported for NLopt version < 2.4")
+    end
+
+    return n
+end
 
 ############################################################################
 # converting error results into exceptions
