@@ -146,6 +146,8 @@ function munge_callback(p::Ptr{Void}, f_::Ptr{Void})
     f = unsafe_pointer_to_objref(f_)::Function
     f(p)::Ptr{Void}
 end
+const munge_callback_ptr = cfunction(munge_callback, Ptr{Void},
+                                     (Ptr{Void}, Ptr{Void}))
 
 function copy(o::Opt)
     p = ccall((:nlopt_copy,:libnlopt), _Opt, (_Opt,), o)
@@ -178,7 +180,7 @@ function copy(o::Opt)
                                                     catch nothing; end)=>i
                                 for i in 1:length(o.cb) ]
         ccall((:nlopt_munge_data,:libnlopt), Void, (_Opt, Ptr{Void}, Any),
-              n, cfunction(munge_callback, Ptr{Void}, (Ptr{Void}, Ptr{Void})),
+              n, munge_callback_ptr,
               p::Ptr{Void} -> p==C_NULL ? C_NULL : 
                               pointer_from_objref(n.cb[cbi[p]]))
     catch e0
@@ -392,6 +394,9 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
         return 0.0 # ignored by nlopt
     end
 end
+const nlopt_callback_wrapper_ptr =
+    cfunction(nlopt_callback_wrapper,
+              Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}))
 
 for m in (:min, :max)
     mf = symbol(string(m,"_objective!"))
@@ -399,9 +404,7 @@ for m in (:min, :max)
         o.cb[1] = Callback_Data(f, o)
         chkn(ccall(($(qsym("nlopt_set_", m, "_objective")),:libnlopt),
                    Cenum, (_Opt, Ptr{Void}, Any),
-                   o, cfunction(nlopt_callback_wrapper,
-                                Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble},
-                                          Ptr{Void})), 
+                   o, nlopt_callback_wrapper_ptr,
                    o.cb[1]))
     end
 end
@@ -415,9 +418,7 @@ for c in (:inequality, :equality)
         push!(o.cb, Callback_Data(f, o))
         chkn(ccall(($(qsym("nlopt_add_", c, "_constraint")),:libnlopt),
                    Cenum, (_Opt, Ptr{Void}, Any, Cdouble),
-                   o, cfunction(nlopt_callback_wrapper,
-                                Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble},
-                                          Ptr{Void})),
+                   o, nlopt_callback_wrapper_ptr,
                    o.cb[end], tol))
     end
     @eval $cf(o::Opt, f::Function) = $cf(o, f, 0.0)
@@ -450,6 +451,11 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
     end
     nothing
 end
+const nlopt_vcallback_wrapper_ptr =
+    cfunction(nlopt_vcallback_wrapper, Void,
+              (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble},
+               Ptr{Void}))
+
 
 for c in (:inequality, :equality)
     cf = symbol(string(c, "_constraint!"))
@@ -459,11 +465,7 @@ for c in (:inequality, :equality)
             chkn(ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
                         :libnlopt),
                        Cenum, (_Opt, Cuint, Ptr{Void}, Any, Ptr{Cdouble}),
-                       o, length(tol),
-                       cfunction(nlopt_vcallback_wrapper,
-                                 Void, (Cuint, Ptr{Cdouble},
-                                        Cuint, Ptr{Cdouble}, Ptr{Cdouble},
-                                        Ptr{Void})),
+                       o, length(tol), nlopt_vcallback_wrapper_ptr,
                        o.cb[end], tol))
         end
         $cf{T<:Real}(o::Opt, f::Function, tol::AbstractVector{T}) =
