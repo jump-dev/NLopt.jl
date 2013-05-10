@@ -55,7 +55,7 @@ Tutorial](http://ab-initio.mit.edu/wiki/index.php/NLopt_Tutorial):
     end
 
     opt = Opt(:LD_MMA, 2)
-    lower_bounds!(opt, [-inf(0.), 0.])
+    lower_bounds!(opt, [-Inf, 0.])
     xtol_rel!(opt,1e-4)
 
     min_objective!(opt, myfunc)
@@ -179,7 +179,7 @@ To retrieve the values of the lower/upper bounds, you can call one of:
 
 both of which return `Vector{Float64}` arrays.
 
-To specify an unbounded dimension, you can use &plusmn;`inf(0.0)`.
+To specify an unbounded dimension, you can use &plusmn;`Inf`.
 
 ### Nonlinear constraints
 
