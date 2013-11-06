@@ -11,7 +11,7 @@ provides(BuildProcess,Autotools(configure_options =
     "--without-octave", "--without-matlab","--with-cxx"],
     libtarget="libnlopt_cxx.la"),libnlopt, os = :Unix)
 
-@osx_only
+@osx_only begin
     using Homebrew
     provides( Homebrew.HB, "nlopt", libnlopt, os = :Darwin )
 end
