@@ -16,7 +16,7 @@ provides(BuildProcess,Autotools(configure_options =
     provides( Homebrew.HB, "nlopt", libnlopt, os = :Darwin )
 end
 
-nloptname = "nlopt-2.4"
+nloptname = "nlopt-2.4.1"
 
 libdir = BinDeps.libdir(libnlopt)
 srcdir = BinDeps.srcdir(libnlopt)
