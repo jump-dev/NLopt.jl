@@ -18,10 +18,9 @@ See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Intro
 Within Julia, use the package manager to run `Pkg.add("NLopt")` to
 install the NLopt module.
 
-You must *also* install the NLopt library on your machine, either from
-source or using precompiled packages for your operating system.  See
-the [NLopt web page](http://ab-initio.mit.edu/nlopt) for information
-about how to download and install NLopt.
+On Windows and OS X platforms, NLopt binaries will be automatically installed.
+On other platforms, Julia will attempt to build NLopt from source;
+be sure to have a compiler installed.
 
 ## Tutorial
 
