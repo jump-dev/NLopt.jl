@@ -133,7 +133,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     end
 
 
-    equality_constraint!(m.opt, g_ineq, zeros(numineq))
+    inequality_constraint!(m.opt, g_ineq, zeros(numineq))
 end
 
 function MathProgSolverInterface.setwarmstart!(m::NLoptMathProgModel,x)
