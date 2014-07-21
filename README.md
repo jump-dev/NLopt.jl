@@ -209,7 +209,7 @@ Here, `tol` is an array of the tolerances in each constraint
 dimension; the dimensionality `m` of the constraint is determined by
 `length(tol)`. The constraint function `c` must be of the form:
 
-    function c(result::Vector, x::Vector, grad::Vector):
+    function c(result::Vector, x::Vector, grad::Matrix):
         if length(grad) > 0:
             ...set grad to gradient, in-place...
         result[1] = ...value of c1(x)...
