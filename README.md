@@ -13,6 +13,8 @@ algorithms, including:
 
 See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Introduction) for a further overview of the types of problems it addresses.
 
+NLopt can be used either by accessing it's specialized API or by using the generic [MathProgBase](https://github.com/mlubin/MathProgBase.jl) interface for nonlinear optimization. Both methods are documented below.
+
 ## Installation
 
 Within Julia, use the package manager to run `Pkg.add("NLopt")` to
@@ -21,6 +23,28 @@ install the NLopt module.
 On Windows and OS X platforms, NLopt binaries will be automatically installed.
 On other platforms, Julia will attempt to build NLopt from source;
 be sure to have a compiler installed.
+
+## Using with MathProgBase
+
+NLopt implements the [MathProgBase interface](http://mathprogbasejl.readthedocs.org/en/latest/nlp.html) for nonlinear optimization, which means that it can be used interchangeably with other optimization packages from modeling packages like [JuMP](https://github.com/JuliaOpt/JuMP.jl) or when providing hand-written derivatives. Note that NLopt does not exploit sparsity of Jacobians.
+
+The NLopt solver is named ``NLoptSolver`` and takes parameters:
+
+ - ``algorithm``
+ - ``stopval``
+ - ``ftol_rel``
+ - ``ftol_abs``
+ - ``xtol_rel``
+ - ``xtol_abs``
+ - ``constrtol_abs``
+ - ``maxeval``
+ - ``maxtime``
+ - ``initial_step``
+ - ``population``
+ - ``seed``
+ - ``vector_storage``
+
+The ``algorithm`` parameter is required, and all others are optional. The meaning and acceptable values of all parameters, except ``constrtol_abs``, match the descriptions below from the specialized NLopt API. The ``constrtol_abs`` parameter is an absolute feasibility tolerance applied to all constraints. 
 
 ## Tutorial
 

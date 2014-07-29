@@ -3,31 +3,85 @@
 export NLoptSolver
 immutable NLoptSolver <: MathProgSolverInterface.AbstractMathProgSolver
     algorithm::Symbol
-    options
+    stopval::Real
+    ftol_rel::Real
+    ftol_abs::Real
+    xtol_rel::Real
+    xtol_abs
+    constrtol_abs::Real
+    maxeval::Integer
+    maxtime::Real
+    initial_step
+    population::Integer
+    seed
+    vector_storage::Integer
 end
 
-function NLoptSolver(;algorithm::Symbol=:none, kwargs...)
+function NLoptSolver(;algorithm::Symbol=:none, stopval::Real=NaN, 
+    ftol_rel::Real=1e-7, ftol_abs::Real=NaN, xtol_rel::Real=1e-7,
+    xtol_abs=nothing, constrtol_abs=1e-7,
+    maxeval::Integer=0, maxtime::Real=0, initial_step=nothing,
+    population::Integer=0, seed=nothing, vector_storage::Integer=0)
     if algorithm == :none
         error("Must specify an algorithm for NLoptSolver")
     end
-    return NLoptSolver(algorithm, kwargs)
+    return NLoptSolver(algorithm, stopval, ftol_rel, ftol_abs, xtol_rel,
+        xtol_abs, constrtol_abs, maxeval, maxtime, initial_step, population, seed,
+        vector_storage)
 end
 
 type NLoptMathProgModel <: MathProgSolverInterface.AbstractMathProgModel
     algorithm::Symbol
-    options
     opt # can't create Opt object on construction because it needs problem dimensions
     x::Vector{Float64}
     objval::Float64
     status::Symbol
+    # options...
+    stopval::Real
+    ftol_rel::Real
+    ftol_abs::Real
+    xtol_rel::Real
+    xtol_abs
+    constrtol_abs::Real
+    maxeval::Integer
+    maxtime::Real
+    initial_step
+    population::Integer
+    seed
+    vector_storage::Integer
 end
 
-MathProgSolverInterface.model(s::NLoptSolver) = NLoptMathProgModel(s.algorithm, s.options, nothing, Float64[], NaN, :NotSolved)
+MathProgSolverInterface.model(s::NLoptSolver) = NLoptMathProgModel(s.algorithm, nothing, Float64[], NaN, :NotSolved, s.stopval, s.ftol_rel, s.ftol_abs, s.xtol_rel, s.xtol_abs, s.constrtol_abs, s.maxeval, s.maxtime, s.initial_step, s.population, s.seed, s.vector_storage)
 
 function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, numVar::Integer, numConstr::Integer, x_l, x_u, g_lb, g_ub, sense::Symbol, d::MathProgSolverInterface.AbstractNLPEvaluator)
 
     (sense == :Min || sense == :Max) || error("Unrecognized sense $sense")
     m.opt = Opt(m.algorithm, numVar)
+
+    # load parameters
+    stopval!(m.opt, m.stopval)
+    if !isnan(m.ftol_rel)
+        ftol_rel!(m.opt, m.ftol_rel)
+    end
+    if !isnan(m.ftol_abs)
+        ftol_abs!(m.opt, m.ftol_abs)
+    end
+    if !isnan(m.xtol_rel)
+        xtol_rel!(m.opt, m.xtol_rel)
+    end
+    if m.xtol_abs != nothing
+        xtol_abs!(m.opt, m.xtol_abs)
+    end
+    maxeval!(m.opt, m.maxeval)
+    maxtime!(m.opt, m.maxtime)
+    if m.initial_step != nothing
+        initial_step!(m.opt, m.inital_step)
+    end
+    population!(m.opt, m.population)
+    if isa(m.seed, Integer)
+        NLopt.srand(m.seed)
+    end
+    vector_storage!(m.opt, m.vector_storage)
 
     lower_bounds!(m.opt, x_l)
     upper_bounds!(m.opt, x_u)
@@ -94,7 +148,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     end
 
     # TODO: make tolerance a parameter
-    equality_constraint!(m.opt, g_eq, zeros(numeq))
+    equality_constraint!(m.opt, g_eq, fill(m.constrtol_abs,numeq))
 
     # inequalities need to be massaged a bit
     # f(x) <= u   =>  f(x) - u <= 0
@@ -133,7 +187,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     end
 
 
-    inequality_constraint!(m.opt, g_ineq, zeros(numineq))
+    inequality_constraint!(m.opt, g_ineq, fill(m.constrtol_abs, numineq))
 end
 
 function MathProgSolverInterface.setwarmstart!(m::NLoptMathProgModel,x)
@@ -148,8 +202,12 @@ function MathProgSolverInterface.optimize!(m::NLoptMathProgModel)
 end
 
 function MathProgSolverInterface.status(m::NLoptMathProgModel)
-    if m.status == :SUCCESS || m.status == :ROUNDOFF_LIMITED
+    if m.status == :SUCCESS || m.status == :FTOL_REACHED || m.status == :XTOL_REACHED
         return :Optimal
+    elseif m.status == :ROUNDOFF_LIMITED
+        return :Suboptimal
+    elseif m.status in (:STOPVAL_REACHED,:MAXEVAL_REACHED,:MAXTIME_REACHED)
+        return :UserLimit
     else
         error("Unknown status $(m.status)")
     end
