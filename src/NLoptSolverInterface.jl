@@ -147,7 +147,6 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
         end
     end
 
-    # TODO: make tolerance a parameter
     equality_constraint!(m.opt, g_eq, fill(m.constrtol_abs,numeq))
 
     # inequalities need to be massaged a bit
