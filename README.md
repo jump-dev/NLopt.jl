@@ -90,13 +90,46 @@ Tutorial](http://ab-initio.mit.edu/wiki/index.php/NLopt_Tutorial):
 
 The output should be:
 
-    got 0.5443310476200902 at [0.333333, 0.296296] after 11 iterations (returned XTOL_REACHED)
+    got 0.5443310476200902 at [0.3333333346933468,0.29629628940318486] after 11 iterations (returned XTOL_REACHED)
 
 Much like the NLopt interfaces in other languages, you create an
 `Opt` object (analogous to `nlopt_opt` in C) which encapsulates the 
 dimensionality of your problem (here, 2) and the algorithm to be used
 (here, `LD_MMA`) and use various functions to specify the constraints
 and stopping criteria (along with any other aspects of the problem).
+
+The same problem can be solved by using the JuMP interface to NLopt:
+
+    using JuMP
+    using NLopt
+
+    m = Model(solver=NLoptSolver(algorithm=:LD_MMA))
+
+    a1 = 2
+    b1 = 0
+    a2 = -1
+    b2 = 1
+
+    @defVar(m, x1)
+    @defVar(m, x2 >= 0)
+
+    @setNLObjective(m, Min, sqrt(x2))
+    @addNLConstraint(m, x2 >= (a1*x1+b1)^3)
+    @addNLConstraint(m, x2 >= (a2*x1+b2)^3)
+
+    setValue(x1, 1.234)
+    setValue(x2, 5.678)
+
+    status = solve(m)
+
+    println("got ", getObjectiveValue(m), " at ", [getValue(x1),getValue(x2)])
+
+The output should be:
+
+    got 0.5443310477213124 at [0.3333333342139688,0.29629628951338166]
+
+Note that the MathProgBase interface sets slightly different convergence tolerances by default,
+so the outputs from the two problems are not identical.
 
 ## Reference
 
