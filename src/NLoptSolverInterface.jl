@@ -107,9 +107,14 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     numineq = ineqcounter-1
     numeq = length(eqidx)
 
+    isderivativefree = string(m.algorithm)[2] == 'N'
+    if isderivativefree
+        requested_features = Symbol[]
+    else
+        requested_features = [:Grad, :Jac]
+    end
 
-    MathProgSolverInterface.initialize(d, [:Grad, :Jac])
-    # TODO: don't ask for gradients if using derivative-free algorithm
+    MathProgSolverInterface.initialize(d, requested_features)
 
     function f(x::Vector, grad::Vector)
         if length(grad) > 0
