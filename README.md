@@ -13,6 +13,8 @@ algorithms, including:
 
 See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Introduction) for a further overview of the types of problems it addresses.
 
+NLopt can be used either by accessing it's specialized API or by using the generic [MathProgBase](https://github.com/mlubin/MathProgBase.jl) interface for nonlinear optimization. Both methods are documented below.
+
 ## Installation
 
 Within Julia, use the package manager to run `Pkg.add("NLopt")` to
@@ -21,6 +23,28 @@ install the NLopt module.
 On Windows and OS X platforms, NLopt binaries will be automatically installed.
 On other platforms, Julia will attempt to build NLopt from source;
 be sure to have a compiler installed.
+
+## Using with MathProgBase
+
+NLopt implements the [MathProgBase interface](http://mathprogbasejl.readthedocs.org/en/latest/nlp.html) for nonlinear optimization, which means that it can be used interchangeably with other optimization packages from modeling packages like [JuMP](https://github.com/JuliaOpt/JuMP.jl) or when providing hand-written derivatives. Note that NLopt does not exploit sparsity of Jacobians.
+
+The NLopt solver is named ``NLoptSolver`` and takes parameters:
+
+ - ``algorithm``
+ - ``stopval``
+ - ``ftol_rel``
+ - ``ftol_abs``
+ - ``xtol_rel``
+ - ``xtol_abs``
+ - ``constrtol_abs``
+ - ``maxeval``
+ - ``maxtime``
+ - ``initial_step``
+ - ``population``
+ - ``seed``
+ - ``vector_storage``
+
+The ``algorithm`` parameter is required, and all others are optional. The meaning and acceptable values of all parameters, except ``constrtol_abs``, match the descriptions below from the specialized NLopt API. The ``constrtol_abs`` parameter is an absolute feasibility tolerance applied to all constraints. 
 
 ## Tutorial
 
@@ -66,13 +90,46 @@ Tutorial](http://ab-initio.mit.edu/wiki/index.php/NLopt_Tutorial):
 
 The output should be:
 
-    got 0.5443310476200902 at [0.333333, 0.296296] after 11 iterations (returned XTOL_REACHED)
+    got 0.5443310476200902 at [0.3333333346933468,0.29629628940318486] after 11 iterations (returned XTOL_REACHED)
 
 Much like the NLopt interfaces in other languages, you create an
 `Opt` object (analogous to `nlopt_opt` in C) which encapsulates the 
 dimensionality of your problem (here, 2) and the algorithm to be used
 (here, `LD_MMA`) and use various functions to specify the constraints
 and stopping criteria (along with any other aspects of the problem).
+
+The same problem can be solved by using the JuMP interface to NLopt:
+
+    using JuMP
+    using NLopt
+
+    m = Model(solver=NLoptSolver(algorithm=:LD_MMA))
+
+    a1 = 2
+    b1 = 0
+    a2 = -1
+    b2 = 1
+
+    @defVar(m, x1)
+    @defVar(m, x2 >= 0)
+
+    @setNLObjective(m, Min, sqrt(x2))
+    @addNLConstraint(m, x2 >= (a1*x1+b1)^3)
+    @addNLConstraint(m, x2 >= (a2*x1+b2)^3)
+
+    setValue(x1, 1.234)
+    setValue(x2, 5.678)
+
+    status = solve(m)
+
+    println("got ", getObjectiveValue(m), " at ", [getValue(x1),getValue(x2)])
+
+The output should be:
+
+    got 0.5443310477213124 at [0.3333333342139688,0.29629628951338166]
+
+Note that the MathProgBase interface sets slightly different convergence tolerances by default,
+so the outputs from the two problems are not identical.
 
 ## Reference
 
@@ -209,7 +266,7 @@ Here, `tol` is an array of the tolerances in each constraint
 dimension; the dimensionality `m` of the constraint is determined by
 `length(tol)`. The constraint function `c` must be of the form:
 
-    function c(result::Vector, x::Vector, grad::Vector):
+    function c(result::Vector, x::Vector, grad::Matrix):
         if length(grad) > 0:
             ...set grad to gradient, in-place...
         result[1] = ...value of c1(x)...

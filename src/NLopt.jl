@@ -7,6 +7,11 @@ export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
 
 import Base.ndims, Base.copy, Base.convert, Base.show
 
+
+require(joinpath(Pkg.dir("MathProgBase"),"src","MathProgSolverInterface.jl"))
+import MathProgSolverInterface
+import MathProgSolverInterface.optimize!
+
 using BinDeps
 @BinDeps.load_dependencies
 
@@ -438,14 +443,17 @@ end
 ############################################################################
 # Vector-valued constraints
 
+
+empty_jac = Array(Cdouble,0,0) # for passing when grad == C_NULL
+
 function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
                                  n::Cuint, x::Ptr{Cdouble},
                                  grad::Ptr{Cdouble}, d_::Ptr{Void})
+    d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
-        d = unsafe_pointer_to_objref(d_)::Callback_Data
         d.f(pointer_to_array(res, (int(m),)),
             pointer_to_array(x, (int(n),)),
-            grad == C_NULL ? empty_grad::Vector{Cdouble}
+            grad == C_NULL ? empty_jac::Matrix{Cdouble}
             : pointer_to_array(grad, (int(n),int(m))))
     catch e
         global nlopt_exception
@@ -498,5 +506,7 @@ optimize{T<:Real}(o::Opt, x::AbstractVector{T}) =
   optimize!(o, copy!(Array(Cdouble,length(x)), x))
 
 ############################################################################
+
+include("NLoptSolverInterface.jl")
 
 end # module
