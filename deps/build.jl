@@ -51,6 +51,6 @@ provides(BuildProcess,
 
 @windows_only push!(BinDeps.defaults, BuildProcess)
 
-@BinDeps.install
+@BinDeps.install [ :libnlopt => :libnlopt ]
 
 @windows_only pop!(BinDeps.defaults)

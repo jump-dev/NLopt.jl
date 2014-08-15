@@ -12,8 +12,11 @@ require(joinpath(Pkg.dir("MathProgBase"),"src","MathProgSolverInterface.jl"))
 import MathProgSolverInterface
 import MathProgSolverInterface.optimize!
 
-using BinDeps
-@BinDeps.load_dependencies
+if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
+    include("../deps/deps.jl")
+else
+    error("NLopt not properly installed. Please run Pkg.build(\"NLopt\")")
+end
 
 ############################################################################
 # Mirrors of NLopt's C enum constants:
