@@ -1,7 +1,7 @@
 
 
 export NLoptSolver
-immutable NLoptSolver <: MathProgSolverInterface.AbstractMathProgSolver
+immutable NLoptSolver <: SolverInterface.AbstractMathProgSolver
     algorithm::Symbol
     stopval::Real
     ftol_rel::Real
@@ -30,7 +30,7 @@ function NLoptSolver(;algorithm::Symbol=:none, stopval::Real=NaN,
         vector_storage)
 end
 
-type NLoptMathProgModel <: MathProgSolverInterface.AbstractMathProgModel
+type NLoptMathProgModel <: SolverInterface.AbstractMathProgModel
     algorithm::Symbol
     opt # can't create Opt object on construction because it needs problem dimensions
     x::Vector{Float64}
@@ -51,9 +51,9 @@ type NLoptMathProgModel <: MathProgSolverInterface.AbstractMathProgModel
     vector_storage::Integer
 end
 
-MathProgSolverInterface.model(s::NLoptSolver) = NLoptMathProgModel(s.algorithm, nothing, Float64[], NaN, :NotSolved, s.stopval, s.ftol_rel, s.ftol_abs, s.xtol_rel, s.xtol_abs, s.constrtol_abs, s.maxeval, s.maxtime, s.initial_step, s.population, s.seed, s.vector_storage)
+SolverInterface.model(s::NLoptSolver) = NLoptMathProgModel(s.algorithm, nothing, Float64[], NaN, :NotSolved, s.stopval, s.ftol_rel, s.ftol_abs, s.xtol_rel, s.xtol_abs, s.constrtol_abs, s.maxeval, s.maxtime, s.initial_step, s.population, s.seed, s.vector_storage)
 
-function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, numVar::Integer, numConstr::Integer, x_l, x_u, g_lb, g_ub, sense::Symbol, d::MathProgSolverInterface.AbstractNLPEvaluator)
+function SolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, numVar::Integer, numConstr::Integer, x_l, x_u, g_lb, g_ub, sense::Symbol, d::SolverInterface.AbstractNLPEvaluator)
 
     (sense == :Min || sense == :Max) || error("Unrecognized sense $sense")
     m.opt = Opt(m.algorithm, numVar)
@@ -114,13 +114,13 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
         requested_features = [:Grad, :Jac]
     end
 
-    MathProgSolverInterface.initialize(d, requested_features)
+    SolverInterface.initialize(d, requested_features)
 
     function f(x::Vector, grad::Vector)
         if length(grad) > 0
-            MathProgSolverInterface.eval_grad_f(d, grad, x)
+            SolverInterface.eval_grad_f(d, grad, x)
         end
-        return MathProgSolverInterface.eval_f(d, x)
+        return SolverInterface.eval_f(d, x)
     end
     if sense == :Min
         min_objective!(m.opt, f)
@@ -128,7 +128,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
         max_objective!(m.opt, f)
     end
 
-    Jac_I,Jac_J = MathProgSolverInterface.jac_structure(d)
+    Jac_I,Jac_J = SolverInterface.jac_structure(d)
     Jac_val = zeros(length(Jac_I))
     g_vec = zeros(numConstr)
 
@@ -138,7 +138,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     function g_eq(result::Vector, x::Vector, jac::Matrix)
         if length(jac) > 0
             fill!(jac, 0.0)
-            MathProgSolverInterface.eval_jac_g(d, Jac_val, x)
+            SolverInterface.eval_jac_g(d, Jac_val, x)
             for k in 1:length(Jac_val)
                 row = Jac_I[k]
                 if g_lb[row] == g_ub[row]
@@ -146,7 +146,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
                 end
             end
         end
-        MathProgSolverInterface.eval_g(d, g_vec, x)
+        SolverInterface.eval_g(d, g_vec, x)
         for (ctr,idx) in enumerate(eqidx)
             result[ctr] = g_vec[idx] - g_ub[idx]
         end
@@ -161,7 +161,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     function g_ineq(result::Vector, x::Vector, jac::Matrix)
         if length(jac) > 0
             fill!(jac, 0.0)
-            MathProgSolverInterface.eval_jac_g(d, Jac_val, x)
+            SolverInterface.eval_jac_g(d, Jac_val, x)
             for k in 1:length(Jac_val)
                 row = Jac_I[k]
                 g_lb[row] == g_ub[row] && continue
@@ -176,7 +176,7 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
                 end
             end
         end
-        MathProgSolverInterface.eval_g(d, g_vec, x)
+        SolverInterface.eval_g(d, g_vec, x)
         for row in 1:numConstr
             g_lb[row] == g_ub[row] && continue
             if isinf(g_lb[row])
@@ -194,18 +194,18 @@ function MathProgSolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, nu
     inequality_constraint!(m.opt, g_ineq, fill(m.constrtol_abs, numineq))
 end
 
-function MathProgSolverInterface.setwarmstart!(m::NLoptMathProgModel,x)
+function SolverInterface.setwarmstart!(m::NLoptMathProgModel,x)
     m.x = copy(float(x))
 end
 
-function MathProgSolverInterface.optimize!(m::NLoptMathProgModel)
+function SolverInterface.optimize!(m::NLoptMathProgModel)
     isa(m.opt, Opt) || error("Must load problem before solving")
     (optf,optx,ret) = optimize!(m.opt, m.x)
     m.objval = optf
     m.status = ret
 end
 
-function MathProgSolverInterface.status(m::NLoptMathProgModel)
+function SolverInterface.status(m::NLoptMathProgModel)
     if m.status == :SUCCESS || m.status == :FTOL_REACHED || m.status == :XTOL_REACHED
         return :Optimal
     elseif m.status == :ROUNDOFF_LIMITED
@@ -217,6 +217,6 @@ function MathProgSolverInterface.status(m::NLoptMathProgModel)
     end
 end
 
-MathProgSolverInterface.getsolution(m::NLoptMathProgModel) = m.x
-MathProgSolverInterface.getobjval(m::NLoptMathProgModel) = m.objval
+SolverInterface.getsolution(m::NLoptMathProgModel) = m.x
+SolverInterface.getobjval(m::NLoptMathProgModel) = m.objval
 

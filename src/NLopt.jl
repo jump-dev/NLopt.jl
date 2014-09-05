@@ -7,10 +7,8 @@ export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
 
 import Base.ndims, Base.copy, Base.convert, Base.show
 
-
-require(joinpath(Pkg.dir("MathProgBase"),"src","MathProgSolverInterface.jl"))
-import MathProgSolverInterface
-import MathProgSolverInterface.optimize!
+import MathProgBase.SolverInterface
+import MathProgBase.SolverInterface.optimize!
 
 if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
     include("../deps/deps.jl")

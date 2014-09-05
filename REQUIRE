@@ -1,4 +1,4 @@
-julia 0.2-
+julia 0.2
 @osx Homebrew
 BinDeps
-MathProgBase
+MathProgBase 0.3.0 0.4.0-
