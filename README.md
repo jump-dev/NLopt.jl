@@ -1,5 +1,5 @@
 # The NLopt module for Julia
-[![Build Status](https://travis-ci.org/stevengj/NLopt.jl.png)](https://travis-ci.org/stevengj/NLopt.jl) [![Build status](https://ci.appveyor.com/api/projects/status/eqw9yb2cyn8sxvo9?svg=true)](https://ci.appveyor.com/project/StevenGJohnson/nlopt-jl)
+[![Build Status](https://travis-ci.org/JuliaOpt/NLopt.jl.png)](https://travis-ci.org/JuliaOpt/NLopt.jl) [![Build status](https://ci.appveyor.com/api/projects/status/eqw9yb2cyn8sxvo9?svg=true)](https://ci.appveyor.com/project/StevenGJohnson/nlopt-jl)
 
 This module provides a [Julia-language](http://julialang.org/)
 interface to the free/open-source [NLopt
