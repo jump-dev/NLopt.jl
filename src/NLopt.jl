@@ -19,6 +19,25 @@ end
 using Compat
 
 ############################################################################
+# separate initializations that must occur at runtime, for precompilation
+
+function __init__()
+    # cfunction returns a raw pointer, so it must be called at runtime
+    global const munge_callback_ptr = cfunction(munge_callback, Ptr{Void},
+                                                (Ptr{Void}, Ptr{Void}))
+    global const nlopt_callback_wrapper_ptr =
+        cfunction(nlopt_callback_wrapper,
+                  Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}))
+    global const nlopt_vcallback_wrapper_ptr =
+        cfunction(nlopt_vcallback_wrapper, Void,
+                  (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble},
+                   Ptr{Void}))
+    
+    # get the version of NLopt at runtime, not compile time
+    global const NLOPT_VERSION = version()
+end
+
+############################################################################
 # Mirrors of NLopt's C enum constants:
 
 # Problem: the NLopt API uses various enum types for both arguments and
@@ -157,8 +176,6 @@ function munge_callback(p::Ptr{Void}, f_::Ptr{Void})
     f = unsafe_pointer_to_objref(f_)::Function
     f(p)::Ptr{Void}
 end
-const munge_callback_ptr = cfunction(munge_callback, Ptr{Void},
-                                     (Ptr{Void}, Ptr{Void}))
 
 function copy(o::Opt)
     p = ccall((:nlopt_copy,libnlopt), _Opt, (_Opt,), o)
@@ -375,8 +392,6 @@ function version()
     VersionNumber(int(v[1]),int(v[2]),int(v[3]))
 end
 
-const NLOPT_VERSION = version()
-
 ############################################################################
 
 srand(seed::Integer) = ccall((:nlopt_srand,libnlopt),
@@ -386,7 +401,7 @@ srand_time() = ccall((:nlopt_srand_time,libnlopt), Void, ())
 ############################################################################
 # Objective function:
 
-empty_grad = Cdouble[] # for passing when grad == C_NULL
+const empty_grad = Cdouble[] # for passing when grad == C_NULL
 
 function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
                                 grad::Ptr{Cdouble}, d_::Ptr{Void})
@@ -394,7 +409,7 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
     try
         res = convert(Cdouble,
                       d.f(pointer_to_array(x, (int(n),)), 
-                          grad == C_NULL ? empty_grad::Vector{Cdouble}
+                          grad == C_NULL ? empty_grad
                           : pointer_to_array(grad, (int(n),))))
         return res::Cdouble
     catch e
@@ -405,9 +420,6 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
         return 0.0 # ignored by nlopt
     end
 end
-const nlopt_callback_wrapper_ptr =
-    cfunction(nlopt_callback_wrapper,
-              Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}))
 
 for m in (:min, :max)
     mf = symbol(string(m,"_objective!"))
@@ -447,7 +459,7 @@ end
 # Vector-valued constraints
 
 
-empty_jac = Array(Cdouble,0,0) # for passing when grad == C_NULL
+const empty_jac = Array(Cdouble,0,0) # for passing when grad == C_NULL
 
 function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
                                  n::Cuint, x::Ptr{Cdouble},
@@ -456,7 +468,7 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
     try
         d.f(pointer_to_array(res, (int(m),)),
             pointer_to_array(x, (int(n),)),
-            grad == C_NULL ? empty_jac::Matrix{Cdouble}
+            grad == C_NULL ? empty_jac
             : pointer_to_array(grad, (int(n),int(m))))
     catch e
         global nlopt_exception
@@ -465,11 +477,6 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
     end
     nothing
 end
-const nlopt_vcallback_wrapper_ptr =
-    cfunction(nlopt_vcallback_wrapper, Void,
-              (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble},
-               Ptr{Void}))
-
 
 for c in (:inequality, :equality)
     cf = symbol(string(c, "_constraint!"))
@@ -511,5 +518,9 @@ optimize{T<:Real}(o::Opt, x::AbstractVector{T}) =
 ############################################################################
 
 include("NLoptSolverInterface.jl")
+
+if VERSION < v"0.3-"
+    __init__() # automatic call to __init__ was added in Julia 0.3
+end
 
 end # module
