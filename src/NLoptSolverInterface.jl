@@ -172,7 +172,7 @@ function SolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, numVar::In
                 else
                     # boxed
                     jac[Jac_J[k],constrmap[row]] += Jac_val[k]
-                    jac[Jac_J[k],constrmap[row]+1] += Jac_val[k]
+                    jac[Jac_J[k],constrmap[row]+1] -= Jac_val[k]
                 end
             end
         end
