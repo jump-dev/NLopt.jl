@@ -49,7 +49,7 @@ end
 # ever ported to ARM, this may need to be fixed (since all of these enums
 # will be packed into a single byte on -fshort-enums architectures).
 typealias Cenum Cint
-typealias cenum int32
+cenum(x) = convert(Cenum, x)
 
 # enum nlopt_algorithm
 const GN_DIRECT = cenum(0)
@@ -157,11 +157,15 @@ type Opt
                                              end, n)
 end
 
-convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
+if VERSION < v"0.4.0-dev+3710"
+    convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
+else
+    Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
+end
 
 destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Void, (_Opt,), o)
 
-ndims(o::Opt) = int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
+ndims(o::Opt) = @compat Int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
 algorithm(o::Opt) = int2alg[ccall((:nlopt_get_algorithm,libnlopt),
                                   Cenum, (_Opt,), o)]
 
@@ -386,10 +390,10 @@ algorithm_name(o::Opt) = algorithm_name(algorithm(o))
 
 function version()
     v = Array(Cint, 3)
-    pv = uint(pointer(v))
-    ccall((:nlopt_version,libnlopt), Void, (Uint,Uint,Uint),
+    pv = pointer(v)
+    ccall((:nlopt_version,libnlopt), Void, (Ptr{Cint},Ptr{Cint},Ptr{Cint}),
           pv, pv + sizeof(Cint), pv + 2*sizeof(Cint))
-    VersionNumber(int(v[1]),int(v[2]),int(v[3]))
+    VersionNumber(convert(Int, v[1]),convert(Int, v[2]),convert(Int, v[3]))
 end
 
 ############################################################################
@@ -408,9 +412,9 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
         res = convert(Cdouble,
-                      d.f(pointer_to_array(x, (int(n),)), 
+                      d.f(pointer_to_array(x, (convert(Int, n),)), 
                           grad == C_NULL ? empty_grad
-                          : pointer_to_array(grad, (int(n),))))
+                          : pointer_to_array(grad, (convert(Int, n),))))
         return res::Cdouble
     catch e
         global nlopt_exception
@@ -466,10 +470,10 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
                                  grad::Ptr{Cdouble}, d_::Ptr{Void})
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
-        d.f(pointer_to_array(res, (int(m),)),
-            pointer_to_array(x, (int(n),)),
+        d.f(pointer_to_array(res, (convert(Int, m),)),
+            pointer_to_array(x, (convert(Int, n),)),
             grad == C_NULL ? empty_jac
-            : pointer_to_array(grad, (int(n),int(m))))
+            : pointer_to_array(grad, (convert(Int, n),convert(Int, m))))
     catch e
         global nlopt_exception
         nlopt_exception = e
