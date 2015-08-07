@@ -1,3 +1,5 @@
+VERSION >= v"0.4.0-dev+6521" && __precompile__()
+
 module NLopt
 
 export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
@@ -10,8 +12,9 @@ import Base.ndims, Base.copy, Base.convert, Base.show
 import MathProgBase.SolverInterface
 import MathProgBase.SolverInterface.optimize!
 
-if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
-    include("../deps/deps.jl")
+const depfile = joinpath(dirname(@__FILE__),"..","deps","deps.jl")
+if isfile(depfile)
+    include(depfile)
 else
     error("NLopt not properly installed. Please run Pkg.build(\"NLopt\")")
 end
