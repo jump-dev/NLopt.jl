@@ -1,35 +1,14 @@
-language: cpp
+language: julia
 os:
     - linux
     - osx
-compiler: 
-    - gcc
+julia:
+    - release
+    - nightly
 notifications:
     email: false
-env:
-  matrix:
-    - JULIAVERSION="juliareleases"
-    - JULIAVERSION="julianightlies"
-before_install:
-    - if [ `uname` = "Linux" ]; then
-        sudo add-apt-repository ppa:staticfloat/julia-deps -y;
-        sudo add-apt-repository ppa:staticfloat/${JULIAVERSION} -y;
-        sudo apt-get update -qq -y;
-        sudo apt-get install libpcre3-dev julia -y;
-      elif [ `uname` = "Darwin" ]; then
-        if [ "$JULIAVERSION" = "julianightlies" ]; then
-          wget -O julia.dmg "http://status.julialang.org/download/osx10.7+";
-        else
-          wget -O julia.dmg "http://status.julialang.org/stable/osx10.7+";
-        fi;
-        hdiutil mount julia.dmg;
-        cp -Ra /Volumes/Julia/*.app/Contents/Resources/julia ~;
-        export PATH="$PATH:$(echo ~)/julia/bin";
-      fi
-    - git config --global user.name "Travis User"
-    - git config --global user.email "travis@example.net"
-    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+sudo: false
 script:
-    - julia -e 'versioninfo(); Pkg.init(); Pkg.clone(pwd()); Pkg.build("NLopt")'
-    - if [ $JULIAVERSION = "julianightlies" ]; then julia --code-coverage test/runtests.jl; fi
-    - if [ $JULIAVERSION = "juliareleases" ]; then julia test/runtests.jl; fi
+    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+    - julia -e 'Pkg.clone(pwd()); Pkg.build("NLopt")'
+    - julia -e 'Pkg.test("NLopt", coverage=true)'
