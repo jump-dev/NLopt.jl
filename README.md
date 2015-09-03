@@ -1,25 +1,30 @@
 # The NLopt module for Julia
-[![Build Status](https://travis-ci.org/JuliaOpt/NLopt.jl.png)](https://travis-ci.org/JuliaOpt/NLopt.jl) [![Build status](https://ci.appveyor.com/api/projects/status/eqw9yb2cyn8sxvo9?svg=true)](https://ci.appveyor.com/project/StevenGJohnson/nlopt-jl)
+[![Build Status](https://travis-ci.org/JuliaOpt/NLopt.jl.svg?branch=master)](https://travis-ci.org/JuliaOpt/NLopt.jl)
+[![Build status](https://ci.appveyor.com/api/projects/status/eqw9yb2cyn8sxvo9?svg=true)](https://ci.appveyor.com/project/StevenGJohnson/nlopt-jl)
 
-This module provides a [Julia-language](http://julialang.org/)
-interface to the free/open-source [NLopt
-library](http://ab-initio.mit.edu/nlopt) for nonlinear optimization.
-NLopt provides a common interface for many different optimization
-algorithms, including:
+[![NLopt](http://pkg.julialang.org/badges/NLopt_0.3.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.3)
+[![NLopt](http://pkg.julialang.org/badges/NLopt_0.4.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.4)
+
+This module provides a [Julia-language](http://julialang.org/) interface to
+the free/open-source [NLopt library](http://ab-initio.mit.edu/nlopt) for
+nonlinear optimization. NLopt provides a common interface for many different
+optimization algorithms, including:
 
 * Both global and local optimization
-* Algorithms using function values only (derivative-free) and
-  also algorithms exploiting user-supplied gradients.
-* Algorithms for unconstrained optimization, bound-constrained optimization, and general nonlinear inequality/equality constraints. 
+* Algorithms using function values only (derivative-free) and also algorithms
+  exploiting user-supplied gradients.
+* Algorithms for unconstrained optimization, bound-constrained optimization,
+  and general nonlinear inequality/equality constraints. 
 
-See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Introduction) for a further overview of the types of problems it addresses.
+See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Introduction)
+for a further overview of the types of problems it addresses.
 
-NLopt can be used either by accessing it's specialized API or by using the generic [MathProgBase](https://github.com/mlubin/MathProgBase.jl) interface for nonlinear optimization. Both methods are documented below.
+NLopt can be used either by accessing it's specialized API or by using the generic [MathProgBase](https://github.com/JuliaOpt/MathProgBase.jl) interface for nonlinear
+optimization. Both methods are documented below.
 
 ## Installation
 
-Within Julia, use the package manager to run `Pkg.add("NLopt")` to
-install the NLopt module.
+Within Julia, you can install the NLopt.jl package with the package manager: `Pkg.add("NLopt")`
 
 On Windows and OS X platforms, NLopt binaries will be automatically installed.
 On other platforms, Julia will attempt to build NLopt from source;
@@ -49,49 +54,52 @@ The ``algorithm`` parameter is required, and all others are optional. The meanin
 
 ## Tutorial
 
-The following example code solves the nonlinearly constrained
-minimization problem from the [NLopt
-Tutorial](http://ab-initio.mit.edu/wiki/index.php/NLopt_Tutorial):
+The following example code solves the nonlinearly constrained minimization
+problem from the [NLopt Tutorial](http://ab-initio.mit.edu/wiki/index.php/NLopt_Tutorial):
 
-    using NLopt
+```julia
+using NLopt
 
-    count = 0 # keep track of # function evaluations
+count = 0 # keep track of # function evaluations
 
-    function myfunc(x::Vector, grad::Vector)
-        if length(grad) > 0
-            grad[1] = 0
-            grad[2] = 0.5/sqrt(x[2])
-        end
-
-        global count
-        count::Int += 1
-        println("f_$count($x)")
-
-        sqrt(x[2])
+function myfunc(x::Vector, grad::Vector)
+    if length(grad) > 0
+        grad[1] = 0
+        grad[2] = 0.5/sqrt(x[2])
     end
+    
+    global count
+    count::Int += 1
+    println("f_$count($x)")
+    
+    sqrt(x[2])
+end
 
-    function myconstraint(x::Vector, grad::Vector, a, b)
-        if length(grad) > 0
-            grad[1] = 3a * (a*x[1] + b)^2
-            grad[2] = -1
-        end
-        (a*x[1] + b)^3 - x[2]
+function myconstraint(x::Vector, grad::Vector, a, b)
+    if length(grad) > 0
+        grad[1] = 3a * (a*x[1] + b)^2
+        grad[2] = -1
     end
+    (a*x[1] + b)^3 - x[2]
+end
 
-    opt = Opt(:LD_MMA, 2)
-    lower_bounds!(opt, [-Inf, 0.])
-    xtol_rel!(opt,1e-4)
+opt = Opt(:LD_MMA, 2)
+lower_bounds!(opt, [-Inf, 0.])
+xtol_rel!(opt,1e-4)
 
-    min_objective!(opt, myfunc)
-    inequality_constraint!(opt, (x,g) -> myconstraint(x,g,2,0), 1e-8)
-    inequality_constraint!(opt, (x,g) -> myconstraint(x,g,-1,1), 1e-8)
+min_objective!(opt, myfunc)
+inequality_constraint!(opt, (x,g) -> myconstraint(x,g,2,0), 1e-8)
+inequality_constraint!(opt, (x,g) -> myconstraint(x,g,-1,1), 1e-8)
 
-    (minf,minx,ret) = optimize(opt, [1.234, 5.678])
-    println("got $minf at $minx after $count iterations (returned $ret)")
+(minf,minx,ret) = optimize(opt, [1.234, 5.678])
+println("got $minf at $minx after $count iterations (returned $ret)")
+```
 
 The output should be:
 
-    got 0.5443310476200902 at [0.3333333346933468,0.29629628940318486] after 11 iterations (returned XTOL_REACHED)
+```
+got 0.5443310476200902 at [0.3333333346933468,0.29629628940318486] after 11 iterations (returned XTOL_REACHED)
+```
 
 Much like the NLopt interfaces in other languages, you create an
 `Opt` object (analogous to `nlopt_opt` in C) which encapsulates the 
