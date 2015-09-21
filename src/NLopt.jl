@@ -248,7 +248,7 @@ function chk(result::Integer)
         if result == INVALID_ARGS
             throw(ArgumentError("invalid NLopt arguments"))
         elseif result == OUT_OF_MEMORY
-            throw(MemoryError())
+            throw(OutOfMemoryError())
         elseif result == FORCED_STOP
             global nlopt_exception
             e = nlopt_exception
