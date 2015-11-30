@@ -30,7 +30,7 @@ function NLoptSolver(;algorithm::Symbol=:none, stopval::Real=NaN,
         vector_storage)
 end
 
-type NLoptMathProgModel <: SolverInterface.AbstractMathProgModel
+type NLoptMathProgModel <: SolverInterface.AbstractNonlinearModel
     algorithm::Symbol
     opt # can't create Opt object on construction because it needs problem dimensions
     x::Vector{Float64}
@@ -51,9 +51,9 @@ type NLoptMathProgModel <: SolverInterface.AbstractMathProgModel
     vector_storage::Integer
 end
 
-SolverInterface.model(s::NLoptSolver) = NLoptMathProgModel(s.algorithm, nothing, Float64[], NaN, :NotSolved, s.stopval, s.ftol_rel, s.ftol_abs, s.xtol_rel, s.xtol_abs, s.constrtol_abs, s.maxeval, s.maxtime, s.initial_step, s.population, s.seed, s.vector_storage)
+SolverInterface.NonlinearModel(s::NLoptSolver) = NLoptMathProgModel(s.algorithm, nothing, Float64[], NaN, :NotSolved, s.stopval, s.ftol_rel, s.ftol_abs, s.xtol_rel, s.xtol_abs, s.constrtol_abs, s.maxeval, s.maxtime, s.initial_step, s.population, s.seed, s.vector_storage)
 
-function SolverInterface.loadnonlinearproblem!(m::NLoptMathProgModel, numVar::Integer, numConstr::Integer, x_l, x_u, g_lb, g_ub, sense::Symbol, d::SolverInterface.AbstractNLPEvaluator)
+function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, numConstr::Integer, x_l, x_u, g_lb, g_ub, sense::Symbol, d::SolverInterface.AbstractNLPEvaluator)
 
     (sense == :Min || sense == :Max) || error("Unrecognized sense $sense")
     m.opt = Opt(m.algorithm, numVar)
