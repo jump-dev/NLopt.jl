@@ -1,4 +1,4 @@
-using BinDeps, Compat
+using BinDeps
 
 @BinDeps.setup
 
@@ -51,6 +51,6 @@ provides(BuildProcess,
 
 @windows_only push!(BinDeps.defaults, BuildProcess)
 
-@BinDeps.install @compat Dict(:libnlopt => :libnlopt)
+@BinDeps.install Dict(:libnlopt => :libnlopt)
 
 @windows_only pop!(BinDeps.defaults)
