@@ -27,6 +27,6 @@ extractdir(w) = joinpath(srcdir,"w$w")
 destw(w) = joinpath(libdir,"libnlopt$(w).dll")
 
 provides(Binaries, URI("http://ab-initio.mit.edu/nlopt/$(nloptname)-dll$(WORD_SIZE).zip"),
-         libnlopt, unpacked_dir="w$WORD_SIZE", os = :Windows)
+         libnlopt, unpacked_dir=".", os = :Windows)
 
 @BinDeps.install Dict(:libnlopt => :libnlopt)
