@@ -38,13 +38,13 @@ provides(BuildProcess,
 		@build_steps begin
 			ChangeDirectory(extractdir(32))
 			FileRule(destw(32), @build_steps begin
-				`cp libnlopt-0.dll $(destw(32))`
+				`powershell -Command "cp libnlopt-0.dll $(destw(32))"`
 				end)
 		end
 		@build_steps begin
 			ChangeDirectory(extractdir(64))
 			FileRule(destw(64), @build_steps begin
-				`cp libnlopt-0.dll $(destw(64))`
+				`powershell -Command "cp libnlopt-0.dll $(destw(64))"`
 				end)
 		end
 	end), libnlopt, os = :Windows)
