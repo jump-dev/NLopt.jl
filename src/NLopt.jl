@@ -255,7 +255,7 @@ function chk(result::Integer)
                 rethrow(e)
             end
         else
-            error("nlopt failure")
+            error("nlopt failure: $result")
         end
     end
     result
