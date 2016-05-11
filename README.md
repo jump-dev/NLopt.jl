@@ -119,19 +119,19 @@ The same problem can be solved by using the JuMP interface to NLopt:
     a2 = -1
     b2 = 1
 
-    @defVar(m, x1)
-    @defVar(m, x2 >= 0)
+    @variable(m, x1)
+    @variable(m, x2 >= 0)
 
-    @setNLObjective(m, Min, sqrt(x2))
-    @addNLConstraint(m, x2 >= (a1*x1+b1)^3)
-    @addNLConstraint(m, x2 >= (a2*x1+b2)^3)
+    @NLobjective(m, Min, sqrt(x2))
+    @NLconstraint(m, x2 >= (a1*x1+b1)^3)
+    @NLconstraint(m, x2 >= (a2*x1+b2)^3)
 
-    setValue(x1, 1.234)
-    setValue(x2, 5.678)
+    setvalue(x1, 1.234)
+    setvalue(x2, 5.678)
 
     status = solve(m)
 
-    println("got ", getObjectiveValue(m), " at ", [getValue(x1),getValue(x2)])
+    println("got ", getobjectivevalue(m), " at ", [getvalue(x1),getvalue(x2)])
 
 The output should be:
 
