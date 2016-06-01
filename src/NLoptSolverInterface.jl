@@ -75,7 +75,7 @@ function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, nu
     maxeval!(m.opt, m.maxeval)
     maxtime!(m.opt, m.maxtime)
     if m.initial_step != nothing
-        initial_step!(m.opt, m.inital_step)
+        initial_step!(m.opt, m.initial_step)
     end
     population!(m.opt, m.population)
     if isa(m.seed, Integer)
