@@ -7,6 +7,9 @@ export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
        min_objective!, max_objective!, equality_constraint!, inequality_constraint!, remove_constraints!,
        optimize!, optimize
 
+using Compat
+import Compat: String
+
 import Base.ndims, Base.copy, Base.convert, Base.show
 
 import MathProgBase.SolverInterface
@@ -33,7 +36,7 @@ function __init__()
         cfunction(nlopt_vcallback_wrapper, Void,
                   (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble},
                    Ptr{Void}))
-    
+
     # get the version of NLopt at runtime, not compile time
     global const NLOPT_VERSION = version()
 end
@@ -133,12 +136,12 @@ type Opt
     # need to store callback data for objective and constraints in
     # Opt so that they aren't garbage-collected.  cb[1] is the objective.
     cb::Vector{Callback_Data}
-    
+
     function Opt(p::_Opt)
         opt = new(p, Array(Callback_Data,1))
         finalizer(opt, destroy)
         opt
-    end        
+    end
     function Opt(algorithm::Integer, n::Integer)
         if algorithm < 0 || algorithm > NUM_ALGORITHMS
             throw(ArgumentError("invalid algorithm $algorithm"))
@@ -214,7 +217,7 @@ function copy(o::Opt)
                                 for i in 1:length(o.cb) ]
         ccall((:nlopt_munge_data,libnlopt), Void, (_Opt, Ptr{Void}, Any),
               n, munge_callback_ptr,
-              p::Ptr{Void} -> p==C_NULL ? C_NULL : 
+              p::Ptr{Void} -> p==C_NULL ? C_NULL :
                               pointer_from_objref(n.cb[cbi[p]]))
     catch e0
         # nlopt_munge_data not available, punt unless there is
@@ -268,13 +271,13 @@ chkn(result::Integer) = begin chk(result); nothing; end
 # getting and setting scalar and vector parameters
 
 # make a quoted symbol expression out of the arguments
-qsym(args...) = Expr(:quote, symbol(string(args...)))
+qsym(args...) = Expr(:quote, Symbol(string(args...)))
 
 # scalar parameters p of type T
 macro GETSET(T, p)
     Tg = T == :Cdouble ? :Real : (T == :Cint || T == :Cuint ? :Integer : :Any)
-    ps = symbol(string(p, "!"))
-    quote 
+    ps = Symbol(string(p, "!"))
+    quote
         $(esc(p))(o::Opt) = ccall(($(qsym("nlopt_get_", p)),libnlopt),
                                   $T, (_Opt,), o)
         $(esc(ps))(o::Opt, val::$Tg) =
@@ -285,7 +288,7 @@ end
 
 # Vector{Cdouble} parameters p
 macro GETSET_VEC(p)
-    ps = symbol(string(p, "!"))
+    ps = Symbol(string(p, "!"))
     quote
         function $(esc(p))(o::Opt, v::Vector{Cdouble})
             if length(v) != ndims(o)
@@ -329,7 +332,7 @@ end
 
 force_stop!(o::Opt) = force_stop!(o, 1)
 
-local_optimizer!(o::Opt, lo::Opt) = 
+local_optimizer!(o::Opt, lo::Opt) =
   chkn(ccall((:nlopt_set_local_optimizer,libnlopt),
              Cenum, (_Opt, _Opt), o, lo))
 
@@ -343,7 +346,7 @@ function default_initial_step!(o::Opt, x::Vector{Cdouble})
     chkn(ccall((:nlopt_set_default_initial_step,libnlopt),
                Cenum, (_Opt, Ptr{Cdouble}), o, x))
 end
-default_initial_step!{T<:Real}(o::Opt, x::AbstractVector{T}) = 
+default_initial_step!{T<:Real}(o::Opt, x::AbstractVector{T}) =
   default_initial_step!(o, copy!(Array(Cdouble,length(x)), x))
 
 function initial_step!(o::Opt, dx::Vector{Cdouble})
@@ -355,7 +358,7 @@ function initial_step!(o::Opt, dx::Vector{Cdouble})
 end
 initial_step!{T<:Real}(o::Opt, dx::AbstractVector{T}) =
   initial_step!(o, copy!(Array(Cdouble,length(dx)), dx))
-initial_step!(o::Opt, dx::Real) = 
+initial_step!(o::Opt, dx::Real) =
   chkn(ccall((:nlopt_set_initial_step1,libnlopt),
              Cenum, (_Opt, Cdouble), o, dx))
 
@@ -368,7 +371,7 @@ function initial_step(o::Opt, x::Vector{Cdouble}, dx::Vector{Cdouble})
     dx
 end
 initial_step{T<:Real}(o::Opt, x::AbstractVector{T}) =
-    initial_step(o, copy!(Array(Cdouble,length(x)), x), 
+    initial_step(o, copy!(Array(Cdouble,length(x)), x),
                  Array(Cdouble, ndims(o)))
 
 ############################################################################
@@ -378,7 +381,7 @@ function algorithm_name(a::Integer)
     if s == C_NULL
         throw(ArgumentError("invalid algorithm $a"))
     end
-    return bytestring(s)
+    return String(s)
 end
 
 algorithm_name(a::Symbol) = algorithm_name(try alg2int[a]
@@ -413,7 +416,7 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
         res = convert(Cdouble,
-                      d.f(pointer_to_array(x, (convert(Int, n),)), 
+                      d.f(pointer_to_array(x, (convert(Int, n),)),
                           grad == C_NULL ? empty_grad
                           : pointer_to_array(grad, (convert(Int, n),))))
         return res::Cdouble
@@ -427,7 +430,7 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
 end
 
 for m in (:min, :max)
-    mf = symbol(string(m,"_objective!"))
+    mf = Symbol(string(m,"_objective!"))
     @eval function $mf(o::Opt, f::Function)
         o.cb[1] = Callback_Data(f, o)
         chkn(ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
@@ -441,7 +444,7 @@ end
 # Nonlinear constraints:
 
 for c in (:inequality, :equality)
-    cf = symbol(string(c, "_constraint!"))
+    cf = Symbol(string(c, "_constraint!"))
     @eval function $cf(o::Opt, f::Function, tol::Real)
         push!(o.cb, Callback_Data(f, o))
         chkn(ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
@@ -484,7 +487,7 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
 end
 
 for c in (:inequality, :equality)
-    cf = symbol(string(c, "_constraint!"))
+    cf = Symbol(string(c, "_constraint!"))
     @eval begin
         function $cf(o::Opt, f::Function, tol::Vector{Cdouble})
             push!(o.cb, Callback_Data(f, o))
