@@ -102,7 +102,13 @@ const GN_ESCH = cenum(42)
 const NUM_ALGORITHMS = 43
 
 const alg2int = Dict{Symbol,Cenum}(:GN_DIRECT=>GN_DIRECT, :GN_DIRECT_L=>GN_DIRECT_L, :GN_DIRECT_L_RAND=>GN_DIRECT_L_RAND, :GN_DIRECT_NOSCAL=>GN_DIRECT_NOSCAL, :GN_DIRECT_L_NOSCAL=>GN_DIRECT_L_NOSCAL, :GN_DIRECT_L_RAND_NOSCAL=>GN_DIRECT_L_RAND_NOSCAL, :GN_ORIG_DIRECT=>GN_ORIG_DIRECT, :GN_ORIG_DIRECT_L=>GN_ORIG_DIRECT_L, :GD_STOGO=>GD_STOGO, :GD_STOGO_RAND=>GD_STOGO_RAND, :LD_LBFGS_NOCEDAL=>LD_LBFGS_NOCEDAL, :LD_LBFGS=>LD_LBFGS, :LN_PRAXIS=>LN_PRAXIS, :LD_VAR1=>LD_VAR1, :LD_VAR2=>LD_VAR2, :LD_TNEWTON=>LD_TNEWTON, :LD_TNEWTON_RESTART=>LD_TNEWTON_RESTART, :LD_TNEWTON_PRECOND=>LD_TNEWTON_PRECOND, :LD_TNEWTON_PRECOND_RESTART=>LD_TNEWTON_PRECOND_RESTART, :GN_CRS2_LM=>GN_CRS2_LM, :GN_MLSL=>GN_MLSL, :GD_MLSL=>GD_MLSL, :GN_MLSL_LDS=>GN_MLSL_LDS, :GD_MLSL_LDS=>GD_MLSL_LDS, :LD_MMA=>LD_MMA, :LN_COBYLA=>LN_COBYLA, :LN_NEWUOA=>LN_NEWUOA, :LN_NEWUOA_BOUND=>LN_NEWUOA_BOUND, :LN_NELDERMEAD=>LN_NELDERMEAD, :LN_SBPLX=>LN_SBPLX, :LN_AUGLAG=>LN_AUGLAG, :LD_AUGLAG=>LD_AUGLAG, :LN_AUGLAG_EQ=>LN_AUGLAG_EQ, :LD_AUGLAG_EQ=>LD_AUGLAG_EQ, :LN_BOBYQA=>LN_BOBYQA, :GN_ISRES=>GN_ISRES, :AUGLAG=>AUGLAG, :AUGLAG_EQ=>AUGLAG_EQ, :G_MLSL=>G_MLSL, :G_MLSL_LDS=>G_MLSL_LDS, :LD_SLSQP=>LD_SLSQP, :LD_CCSAQ=>LD_CCSAQ, :GN_ESCH=>GN_ESCH)
-const int2alg = (Cenum=>Symbol)[alg2int[k]=>k for k in keys(alg2int)]
+const int2alg = Dict{Cenum,Symbol}()
+
+# in 0.4 we could use int2alg=[alg2int[k]=>k for k in keys], and in 0.5 a generator
+# expression, but Compat currently does not support generator expressions.
+for k in keys(alg2int)
+    int2alg[alg2int[k]] = k
+end
 
 # enum nlopt_result
 const FAILURE = cenum(-1)
@@ -212,9 +218,12 @@ function copy(o::Opt)
         # to transform each stored pointer in n.o, and we use the cbi
         # dictionary to convert pointers to indices into o.cb, whence
         # we obtain the corresponding element of n.cb.
-        cbi = (Ptr{Void}=>Int)[ pointer_from_objref(try o.cb[i]
-                                                    catch nothing; end)=>i
-                                for i in 1:length(o.cb) ]
+        cbi = Dict{Ptr{Void},Int}()
+        for i in 1:length(o.cb)
+            try
+                cbi[pointer_from_objref(o.cb[i])] = i
+            end
+        end
         ccall((:nlopt_munge_data,libnlopt), Void, (_Opt, Ptr{Void}, Any),
               n, munge_callback_ptr,
               p::Ptr{Void} -> p==C_NULL ? C_NULL :
@@ -416,9 +425,9 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
         res = convert(Cdouble,
-                      d.f(pointer_to_array(x, (convert(Int, n),)),
+                      d.f(unsafe_wrap(Array, x, (convert(Int, n),)),
                           grad == C_NULL ? empty_grad
-                          : pointer_to_array(grad, (convert(Int, n),))))
+                          : unsafe_wrap(Array, grad, (convert(Int, n),))))
         return res::Cdouble
     catch e
         global nlopt_exception
@@ -474,10 +483,10 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
                                  grad::Ptr{Cdouble}, d_::Ptr{Void})
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
-        d.f(pointer_to_array(res, (convert(Int, m),)),
-            pointer_to_array(x, (convert(Int, n),)),
+        d.f(unsafe_wrap(Array, res, (convert(Int, m),)),
+            unsafe_wrap(Array, x, (convert(Int, n),)),
             grad == C_NULL ? empty_jac
-            : pointer_to_array(grad, (convert(Int, n),convert(Int, m))))
+            : unsafe_wrap(Array, grad, (convert(Int, n),convert(Int, m))))
     catch e
         global nlopt_exception
         nlopt_exception = e

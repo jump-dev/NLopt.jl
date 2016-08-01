@@ -2,4 +2,4 @@ julia 0.4
 @osx Homebrew
 BinDeps
 MathProgBase 0.5 0.6
-Compat 0.7.20
+Compat 0.8
