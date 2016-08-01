@@ -4,6 +4,7 @@
 
 [![NLopt](http://pkg.julialang.org/badges/NLopt_0.3.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.3)
 [![NLopt](http://pkg.julialang.org/badges/NLopt_0.4.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.4)
+[![NLopt](http://pkg.julialang.org/badges/NLopt_0.5.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.5)
 
 This module provides a [Julia-language](http://julialang.org/) interface to
 the free/open-source [NLopt library](http://ab-initio.mit.edu/nlopt) for
@@ -14,7 +15,7 @@ optimization algorithms, including:
 * Algorithms using function values only (derivative-free) and also algorithms
   exploiting user-supplied gradients.
 * Algorithms for unconstrained optimization, bound-constrained optimization,
-  and general nonlinear inequality/equality constraints. 
+  and general nonlinear inequality/equality constraints.
 
 See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Introduction)
 for a further overview of the types of problems it addresses.
@@ -50,7 +51,7 @@ The NLopt solver is named ``NLoptSolver`` and takes parameters:
  - ``seed``
  - ``vector_storage``
 
-The ``algorithm`` parameter is required, and all others are optional. The meaning and acceptable values of all parameters, except ``constrtol_abs``, match the descriptions below from the specialized NLopt API. The ``constrtol_abs`` parameter is an absolute feasibility tolerance applied to all constraints. 
+The ``algorithm`` parameter is required, and all others are optional. The meaning and acceptable values of all parameters, except ``constrtol_abs``, match the descriptions below from the specialized NLopt API. The ``constrtol_abs`` parameter is an absolute feasibility tolerance applied to all constraints.
 
 ## Tutorial
 
@@ -67,11 +68,11 @@ function myfunc(x::Vector, grad::Vector)
         grad[1] = 0
         grad[2] = 0.5/sqrt(x[2])
     end
-    
+
     global count
     count::Int += 1
     println("f_$count($x)")
-    
+
     sqrt(x[2])
 end
 
@@ -102,7 +103,7 @@ got 0.5443310476200902 at [0.3333333346933468,0.29629628940318486] after 11 iter
 ```
 
 Much like the NLopt interfaces in other languages, you create an
-`Opt` object (analogous to `nlopt_opt` in C) which encapsulates the 
+`Opt` object (analogous to `nlopt_opt` in C) which encapsulates the
 dimensionality of your problem (here, 2) and the algorithm to be used
 (here, `LD_MMA`) and use various functions to specify the constraints
 and stopping criteria (along with any other aspects of the problem).
@@ -522,4 +523,3 @@ where `VersionNumber` is a built-in Julia type from the Julia standard library.
 ## Author
 
 This module was written by [Steven G. Johnson](http://math.mit.edu/~stevenj/).
-
