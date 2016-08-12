@@ -1,8 +1,9 @@
 using BinDeps
+using Compat
 
 @BinDeps.setup
 
-libnlopt = library_dependency("libnlopt", aliases=["libnlopt_cxx", "libnlopt$(WORD_SIZE)"])
+libnlopt = library_dependency("libnlopt", aliases=["libnlopt_cxx", "libnlopt$(Sys.WORD_SIZE)"])
 
 provides(AptGet, "libnlopt0", libnlopt)
 
