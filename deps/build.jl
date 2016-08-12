@@ -1,8 +1,9 @@
 using BinDeps
+using Compat
 
 @BinDeps.setup
 
-libnlopt = library_dependency("libnlopt", aliases=["libnlopt_cxx", "libnlopt$(WORD_SIZE)"])
+libnlopt = library_dependency("libnlopt", aliases=["libnlopt_cxx", "libnlopt$(Sys.WORD_SIZE)"])
 
 provides(AptGet, "libnlopt0", libnlopt)
 
@@ -13,7 +14,7 @@ provides(BuildProcess,Autotools(configure_options =
     "--without-octave", "--without-matlab","--with-cxx"],
     libtarget="libnlopt_cxx.la"),libnlopt, os = :Unix)
 
-@osx_only begin
+if is_apple()
     using Homebrew
     provides( Homebrew.HB, "nlopt", libnlopt, os = :Darwin )
 end
@@ -49,8 +50,12 @@ provides(BuildProcess,
 		end
 	end), libnlopt, os = :Windows)
 
-@windows_only push!(BinDeps.defaults, BuildProcess)
+if is_windows()
+    push!(BinDeps.defaults, BuildProcess)
+end
 
 @BinDeps.install Dict(:libnlopt => :libnlopt)
 
-@windows_only pop!(BinDeps.defaults)
+if is_windows()
+    pop!(BinDeps.defaults)
+end
