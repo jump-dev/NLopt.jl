@@ -522,4 +522,5 @@ where `VersionNumber` is a built-in Julia type from the Julia standard library.
 
 ## Author
 
-This module was written by [Steven G. Johnson](http://math.mit.edu/~stevenj/).
+This module was initially written by [Steven G. Johnson](http://math.mit.edu/~stevenj/),
+with subsequent contributions by several other authors (see the git history).
