@@ -26,6 +26,13 @@ srcdir = BinDeps.srcdir(libnlopt)
 downloadsdir = BinDeps.downloadsdir(libnlopt)
 extractdir(w) = joinpath(srcdir,"w$w")
 destw(w) = joinpath(libdir,"libnlopt$(w).dll")
+
+type FileCopyRule <: BinDeps.BuildStep
+    src::AbstractString
+    dest::AbstractString
+end
+Base.run(fc::FileCopyRule) = isfile(fc.dest) || cp(fc.src, fc.dest)
+
 provides(BuildProcess,
 	(@build_steps begin
 		FileDownloader("http://ab-initio.mit.edu/nlopt/$(nloptname)-dll32.zip", joinpath(downloadsdir, "$(nloptname)-dll32.zip"))
@@ -36,18 +43,8 @@ provides(BuildProcess,
 		FileUnpacker(joinpath(downloadsdir,"$(nloptname)-dll32.zip"), extractdir(32), joinpath(extractdir(32),"matlab"))
 		FileUnpacker(joinpath(downloadsdir,"$(nloptname)-dll64.zip"), extractdir(64), joinpath(extractdir(64),"matlab"))
 		CreateDirectory(libdir, true)
-		@build_steps begin
-			ChangeDirectory(extractdir(32))
-			FileRule(destw(32), @build_steps begin
-				`powershell -Command "cp libnlopt-0.dll $(destw(32))"`
-				end)
-		end
-		@build_steps begin
-			ChangeDirectory(extractdir(64))
-			FileRule(destw(64), @build_steps begin
-				`powershell -Command "cp libnlopt-0.dll $(destw(64))"`
-				end)
-		end
+        FileCopyRule(joinpath(extractdir(32),"libnlopt-0.dll"), destw(32))
+        FileCopyRule(joinpath(extractdir(64),"libnlopt-0.dll"), destw(64))
 	end), libnlopt, os = :Windows)
 
 if is_windows()
