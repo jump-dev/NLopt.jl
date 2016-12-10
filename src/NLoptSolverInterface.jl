@@ -111,7 +111,7 @@ function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, nu
     if isderivativefree
         requested_features = Symbol[]
     else
-        requested_features = [:Grad, :Jac]
+        requested_features = numConstr > 0 ? [:Grad, :Jac] : [:Grad]
     end
 
     SolverInterface.initialize(d, requested_features)
@@ -128,7 +128,7 @@ function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, nu
         max_objective!(m.opt, f)
     end
 
-    Jac_I,Jac_J = SolverInterface.jac_structure(d)
+    Jac_I,Jac_J = numConstr > 0 ? SolverInterface.jac_structure(d) : (Int[], Int[])
     Jac_val = zeros(length(Jac_I))
     g_vec = zeros(numConstr)
 
