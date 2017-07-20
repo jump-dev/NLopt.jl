@@ -144,7 +144,7 @@ type Opt
     cb::Vector{Callback_Data}
 
     function Opt(p::_Opt)
-        opt = new(p, Array(Callback_Data,1))
+        opt = new(p, Array{Callback_Data}(1))
         finalizer(opt, destroy)
         opt
     end
@@ -386,7 +386,7 @@ initial_step{T<:Real}(o::Opt, x::AbstractVector{T}) =
 ############################################################################
 
 function algorithm_name(a::Integer)
-    s = ccall((:nlopt_algorithm_name,libnlopt), Ptr{Uint8}, (Cenum,), a)
+    s = ccall((:nlopt_algorithm_name,libnlopt), Ptr{UInt8}, (Cenum,), a)
     if s == C_NULL
         throw(ArgumentError("invalid algorithm $a"))
     end
@@ -402,7 +402,7 @@ algorithm_name(o::Opt) = algorithm_name(algorithm(o))
 ############################################################################
 
 function version()
-    v = Array(Cint, 3)
+    v = Array{Cint}(3)
     pv = pointer(v)
     ccall((:nlopt_version,libnlopt), Void, (Ptr{Cint},Ptr{Cint},Ptr{Cint}),
           pv, pv + sizeof(Cint), pv + 2*sizeof(Cint))
@@ -476,7 +476,7 @@ end
 # Vector-valued constraints
 
 
-const empty_jac = Array(Cdouble,0,0) # for passing when grad == C_NULL
+const empty_jac = Array{Cdouble}(0,0) # for passing when grad == C_NULL
 
 function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
                                  n::Cuint, x::Ptr{Cdouble},
@@ -522,7 +522,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     if length(x) != ndims(o)
         throw(BoundsError())
     end
-    opt_f = Array(Cdouble, 1)
+    opt_f = Array{Cdouble}(1)
     ret = ccall((:nlopt_optimize,libnlopt), Cenum, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
@@ -530,7 +530,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
 end
 
 optimize{T<:Real}(o::Opt, x::AbstractVector{T}) =
-  optimize!(o, copy!(Array(Cdouble,length(x)), x))
+  optimize!(o, copy!(Array{Cdouble}(length(x)), x))
 
 ############################################################################
 
