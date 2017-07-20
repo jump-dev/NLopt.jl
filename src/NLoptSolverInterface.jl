@@ -90,7 +90,7 @@ function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, nu
     ineqidx = find(g_lb .!= g_ub)
 
     # map from eqidx/ineqidx to index in equalities/inequalities
-    constrmap = Array(Int,numConstr)
+    constrmap = Array{Int}(numConstr)
     for i in 1:length(eqidx)
         constrmap[eqidx[i]] = i
     end
