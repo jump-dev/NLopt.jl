@@ -52,7 +52,7 @@ end
 # apparently default to sizeof(enum)==sizeof(int).]  So, if Julia is
 # ever ported to ARM, this may need to be fixed (since all of these enums
 # will be packed into a single byte on -fshort-enums architectures).
-typealias Cenum Cint
+const Cenum = Cint
 cenum(x) = convert(Cenum, x)
 
 # enum nlopt_algorithm
@@ -128,7 +128,7 @@ const res2sym = Dict{Cenum,Symbol}(FAILURE=>:FAILURE, INVALID_ARGS=>:INVALID_ARG
 ############################################################################
 # wrapper around nlopt_opt type
 
-typealias _Opt Ptr{Void} # nlopt_opt
+const _Opt = Ptr{Void} # nlopt_opt
 
 # pass both f and o to the callback so that we can handle exceptions
 type Callback_Data
