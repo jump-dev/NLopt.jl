@@ -7,7 +7,7 @@ libnlopt = library_dependency("libnlopt", aliases=["libnlopt_cxx", "libnlopt$(Sy
 
 provides(AptGet, "libnlopt0", libnlopt)
 
-provides(Sources,URI("http://ab-initio.mit.edu/nlopt/nlopt-2.4.tar.gz"), libnlopt)
+provides(Sources,URI("https://github.com/stevengj/nlopt/releases/download/nlopt-2.4.2/nlopt-2.4.2.tar.gz"), libnlopt)
 
 provides(BuildProcess,Autotools(configure_options =
     ["--enable-shared", "--without-guile", "--without-python",
@@ -19,7 +19,7 @@ if is_apple()
     provides( Homebrew.HB, "homebrew/science/nlopt", libnlopt, os = :Darwin )
 end
 
-nloptname = "nlopt-2.4.1"
+nloptname = "nlopt-2.4.2"
 
 libdir = BinDeps.libdir(libnlopt)
 srcdir = BinDeps.srcdir(libnlopt)
@@ -33,10 +33,12 @@ type FileCopyRule <: BinDeps.BuildStep
 end
 Base.run(fc::FileCopyRule) = isfile(fc.dest) || cp(fc.src, fc.dest)
 
+url_binaries = "https://github.com/stevengj/nlopt/releases/download/$nloptname"
+
 provides(BuildProcess,
 	(@build_steps begin
-		FileDownloader("http://ab-initio.mit.edu/nlopt/$(nloptname)-dll32.zip", joinpath(downloadsdir, "$(nloptname)-dll32.zip"))
-		FileDownloader("http://ab-initio.mit.edu/nlopt/$(nloptname)-dll64.zip", joinpath(downloadsdir, "$(nloptname)-dll64.zip"))
+		FileDownloader("$url_binaries/$(nloptname)-dll32.zip", joinpath(downloadsdir, "$(nloptname)-dll32.zip"))
+		FileDownloader("$url_binaries/$(nloptname)-dll64.zip", joinpath(downloadsdir, "$(nloptname)-dll64.zip"))
 		CreateDirectory(srcdir, true)
 		CreateDirectory(joinpath(srcdir,"w32"), true)
 		CreateDirectory(joinpath(srcdir,"w64"), true)
