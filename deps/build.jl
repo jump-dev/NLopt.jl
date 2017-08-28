@@ -16,7 +16,7 @@ provides(BuildProcess,Autotools(configure_options =
 
 if is_apple()
     using Homebrew
-    provides( Homebrew.HB, "homebrew/science/nlopt", libnlopt, os = :Darwin )
+    provides( Homebrew.HB, "homebrew/core/nlopt", libnlopt, os = :Darwin )
 end
 
 nloptname = "nlopt-2.4.2"
