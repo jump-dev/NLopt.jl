@@ -520,6 +520,33 @@ NLOPT_VERSION::VersionNumber
 
 where `VersionNumber` is a built-in Julia type from the Julia standard library.
 
+### FAQ
+
+1. Q: What are all of the possible algorithms that I can use?
+
+   A: This is information is included in
+[src/NLopt.jl](https://github.com/JuliaOpt/NLopt.jl/blob/master/src/NLopt.jl). At
+the time of writing `NLopt.jl` includes 43 algorithms (the latest value can
+be found by inspecting the value of `NUM_ALGORITHMS`). For brevity, this list
+will not be repeated here (refer to the source).
+
+1. Q: What are those common substrings that appear in many of the `NLopt`
+algorithm names (e.g. "LN", "LD", "GN", "GD")?
+
+   A: 
+   * "G" - the solutions are global
+   * "L" - solutions are local (possibly global)
+   * "D" - derivatives/gradients are required
+   * "N" - no derivatives are required.
+   Those algorithms which don't include such a substring may depend on another
+optimization algorithm (e.g. Auglag).
+
+1. Q: I'm getting the `NLopt` (C library) error "ArgumentError: invalid NLopt arguments"... Why?
+
+   A: It's  very likely that you are providing gradients to an algorithm which
+   does not require them (or vice versa). Check the name of the algorithm you're
+   using against the substrings described in the FAQ above.
+
 ## Author
 
 This module was initially written by [Steven G. Johnson](http://math.mit.edu/~stevenj/),
