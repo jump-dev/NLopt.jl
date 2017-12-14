@@ -7,6 +7,10 @@ julia:
     - 0.5
     - 0.6
     - nightly
+addons:
+    apt: # apt-get for linux
+        packages:
+            - libnlopt0 # We install it this way to be able to run Travis with `sudo: false`
 notifications:
     email: false
 sudo: false
