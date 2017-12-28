@@ -167,11 +167,7 @@ type Opt
                                              end, n)
 end
 
-if VERSION < v"0.4.0-dev+3710"
-    convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
-else
-    Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
-end
+Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
 
 destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Void, (_Opt,), o)
 
@@ -536,8 +532,5 @@ optimize{T<:Real}(o::Opt, x::AbstractVector{T}) =
 
 include("NLoptSolverInterface.jl")
 
-if VERSION < v"0.3-"
-    __init__() # automatic call to __init__ was added in Julia 0.3
-end
 
 end # module
