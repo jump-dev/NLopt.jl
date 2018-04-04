@@ -6,6 +6,7 @@ using Compat
 libnlopt = library_dependency("libnlopt", aliases=["libnlopt_cxx", "libnlopt$(Sys.WORD_SIZE)"])
 
 provides(AptGet, "libnlopt0", libnlopt)
+provides(BSDPkg, "nlopt", libnlopt, os=:FreeBSD)
 
 provides(Sources,URI("https://github.com/stevengj/nlopt/releases/download/nlopt-2.4.2/nlopt-2.4.2.tar.gz"), libnlopt)
 
