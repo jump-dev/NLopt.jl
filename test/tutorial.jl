@@ -35,7 +35,7 @@ inequality_constraint!(opt, (x,g) -> myconstraint(x,g,-1,1), 1e-8)
 (minf,minx,ret) = optimize(opt, [1.234, 5.678])
 println("got $minf at $minx after $count iterations (returned $ret)")
 
-@test_approx_eq_eps minx[1] 1/3 1e-5
-@test_approx_eq_eps minx[2] 8/27 1e-5
-@test_approx_eq_eps minf sqrt(8/27) 1e-5
+@test minx[1] ≈ 1/3 rtol=1e-5
+@test minx[2] ≈ 8/27 rtol=1e-5
+@test minf ≈ sqrt(8/27) rtol=1e-5
 @test ret == :XTOL_REACHED
