@@ -303,7 +303,7 @@ macro GETSET_VEC(p)
                       Cenum, (_Opt, Ptr{Cdouble}), o, v))
             v
         end
-        $(esc(p))(o::Opt) = $(esc(p))(o, Array(Cdouble, ndims(o)))
+        $(esc(p))(o::Opt) = $(esc(p))(o, Array{Cdouble}(ndims(o)))
         function $(esc(ps))(o::Opt, v::Vector{Cdouble})
             if length(v) != ndims(o)
                 throw(BoundsError())
@@ -312,7 +312,7 @@ macro GETSET_VEC(p)
                       Cenum, (_Opt, Ptr{Cdouble}), o, v))
         end
         $(esc(ps)){T<:Real}(o::Opt, v::AbstractVector{T}) =
-          $(esc(ps))(o, copy!(Array(Cdouble,length(v)), v))
+          $(esc(ps))(o, copy!(Array{Cdouble}(length(v)), v))
         $(esc(ps))(o::Opt, val::Real) =
           chkn(ccall(($(qsym("nlopt_set_", p, "1")),libnlopt),
                      Cenum, (_Opt, Cdouble), o, val))
@@ -352,7 +352,7 @@ function default_initial_step!(o::Opt, x::Vector{Cdouble})
                Cenum, (_Opt, Ptr{Cdouble}), o, x))
 end
 default_initial_step!{T<:Real}(o::Opt, x::AbstractVector{T}) =
-  default_initial_step!(o, copy!(Array(Cdouble,length(x)), x))
+  default_initial_step!(o, copy!(Array{Cdouble}(length(x)), x))
 
 function initial_step!(o::Opt, dx::Vector{Cdouble})
     if length(dx) != ndims(o)
@@ -362,7 +362,7 @@ function initial_step!(o::Opt, dx::Vector{Cdouble})
                Cenum, (_Opt, Ptr{Cdouble}), o, dx))
 end
 initial_step!{T<:Real}(o::Opt, dx::AbstractVector{T}) =
-  initial_step!(o, copy!(Array(Cdouble,length(dx)), dx))
+  initial_step!(o, copy!(Array{Cdouble}(length(dx)), dx))
 initial_step!(o::Opt, dx::Real) =
   chkn(ccall((:nlopt_set_initial_step1,libnlopt),
              Cenum, (_Opt, Cdouble), o, dx))
@@ -376,8 +376,8 @@ function initial_step(o::Opt, x::Vector{Cdouble}, dx::Vector{Cdouble})
     dx
 end
 initial_step{T<:Real}(o::Opt, x::AbstractVector{T}) =
-    initial_step(o, copy!(Array(Cdouble,length(x)), x),
-                 Array(Cdouble, ndims(o)))
+    initial_step(o, copy!(Array{Cdouble}(length(x)), x),
+                 Array{Cdouble}(ndims(o)))
 
 ############################################################################
 
@@ -503,9 +503,9 @@ for c in (:inequality, :equality)
                        o.cb[end], tol))
         end
         $cf{T<:Real}(o::Opt, f::Function, tol::AbstractVector{T}) =
-           $cf(o, f, copy!(Array(Float64,length(tol)), tol))
+           $cf(o, f, copy!(Array{Float64}(length(tol)), tol))
         $cf(o::Opt, m::Integer, f::Function, tol::Real) =
-           $cf(o, f, fill!(Array(Cdouble, m), tol))
+           $cf(o, f, fill!(Array{Cdouble}(m), tol))
         $cf(o::Opt, m::Integer, f::Function)=
            $cf(o, m, f, 0.0)
     end
