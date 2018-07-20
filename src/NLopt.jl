@@ -27,15 +27,15 @@ end
 
 function __init__()
     # cfunction returns a raw pointer, so it must be called at runtime
-    global const munge_callback_ptr = cfunction(munge_callback, Ptr{Void},
-                                                (Ptr{Void}, Ptr{Void}))
+    global const munge_callback_ptr = cfunction(munge_callback, Ptr{Nothing},
+                                                (Ptr{Nothing}, Ptr{Nothing}))
     global const nlopt_callback_wrapper_ptr =
         cfunction(nlopt_callback_wrapper,
-                  Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Void}))
+                  Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Nothing}))
     global const nlopt_vcallback_wrapper_ptr =
-        cfunction(nlopt_vcallback_wrapper, Void,
+        cfunction(nlopt_vcallback_wrapper, Nothing,
                   (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble},
-                   Ptr{Void}))
+                   Ptr{Nothing}))
 
     # get the version of NLopt at runtime, not compile time
     global const NLOPT_VERSION = version()
@@ -128,15 +128,15 @@ const res2sym = Dict{Cenum,Symbol}(FAILURE=>:FAILURE, INVALID_ARGS=>:INVALID_ARG
 ############################################################################
 # wrapper around nlopt_opt type
 
-const _Opt = Ptr{Void} # nlopt_opt
+const _Opt = Ptr{Nothing} # nlopt_opt
 
 # pass both f and o to the callback so that we can handle exceptions
-type Callback_Data
+mutable struct Callback_Data
     f::Function
     o::Any # should be Opt, but see Julia issue #269
 end
 
-type Opt
+mutable struct Opt
     opt::_Opt
 
     # need to store callback data for objective and constraints in
@@ -144,8 +144,8 @@ type Opt
     cb::Vector{Callback_Data}
 
     function Opt(p::_Opt)
-        opt = new(p, Array{Callback_Data}(1))
-        finalizer(opt, destroy)
+        opt = new(p, Array{Callback_Data}(undef,1))
+        finalizer(destroy,opt)
         opt
     end
     function Opt(algorithm::Integer, n::Integer)
@@ -169,7 +169,7 @@ end
 
 Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
 
-destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Void, (_Opt,), o)
+destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Nothing, (_Opt,), o)
 
 ndims(o::Opt) = Int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
 algorithm(o::Opt) = int2alg[ccall((:nlopt_get_algorithm,libnlopt),
@@ -182,9 +182,9 @@ show(io::IO, o::Opt) = print(io, "Opt(:$(algorithm(o)), $(ndims(o)))")
 # new Callback_Data.
 
 # callback wrapper for nlopt_munge_data in NLopt 2.4
-function munge_callback(p::Ptr{Void}, f_::Ptr{Void})
+function munge_callback(p::Ptr{Nothing}, f_::Ptr{Nothing})
     f = unsafe_pointer_to_objref(f_)::Function
-    f(p)::Ptr{Void}
+    f(p)::Ptr{Nothing}
 end
 
 function copy(o::Opt)
@@ -214,15 +214,15 @@ function copy(o::Opt)
         # to transform each stored pointer in n.o, and we use the cbi
         # dictionary to convert pointers to indices into o.cb, whence
         # we obtain the corresponding element of n.cb.
-        cbi = Dict{Ptr{Void},Int}()
+        cbi = Dict{Ptr{Nothing},Int}()
         for i in 1:length(o.cb)
             try
                 cbi[pointer_from_objref(o.cb[i])] = i
             end
         end
-        ccall((:nlopt_munge_data,libnlopt), Void, (_Opt, Ptr{Void}, Any),
+        ccall((:nlopt_munge_data,libnlopt), Nothing, (_Opt, Ptr{Nothing}, Any),
               n, munge_callback_ptr,
-              p::Ptr{Void} -> p==C_NULL ? C_NULL :
+              p::Ptr{Nothing} -> p==C_NULL ? C_NULL :
                               pointer_from_objref(n.cb[cbi[p]]))
     catch e0
         # nlopt_munge_data not available, punt unless there is
@@ -243,7 +243,7 @@ end
 ############################################################################
 # converting error results into exceptions
 
-type ForcedStop <: Exception end
+mutable struct ForcedStop <: Exception end
 
 # cache current exception for forced stop
 nlopt_exception = nothing
@@ -398,9 +398,9 @@ algorithm_name(o::Opt) = algorithm_name(algorithm(o))
 ############################################################################
 
 function version()
-    v = Array{Cint}(3)
+    v = Array{Cint}(undef,3)
     pv = pointer(v)
-    ccall((:nlopt_version,libnlopt), Void, (Ptr{Cint},Ptr{Cint},Ptr{Cint}),
+    ccall((:nlopt_version,libnlopt), Nothing, (Ptr{Cint},Ptr{Cint},Ptr{Cint}),
           pv, pv + sizeof(Cint), pv + 2*sizeof(Cint))
     VersionNumber(convert(Int, v[1]),convert(Int, v[2]),convert(Int, v[3]))
 end
@@ -408,8 +408,8 @@ end
 ############################################################################
 
 srand(seed::Integer) = ccall((:nlopt_srand,libnlopt),
-                             Void, (Culong,), seed)
-srand_time() = ccall((:nlopt_srand_time,libnlopt), Void, ())
+                             Nothing, (Culong,), seed)
+srand_time() = ccall((:nlopt_srand_time,libnlopt), Nothing, ())
 
 ############################################################################
 # Objective function:
@@ -417,7 +417,7 @@ srand_time() = ccall((:nlopt_srand_time,libnlopt), Void, ())
 const empty_grad = Cdouble[] # for passing when grad == C_NULL
 
 function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
-                                grad::Ptr{Cdouble}, d_::Ptr{Void})
+                                grad::Ptr{Cdouble}, d_::Ptr{Nothing})
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
         res = convert(Cdouble,
@@ -439,7 +439,7 @@ for m in (:min, :max)
     @eval function $mf(o::Opt, f::Function)
         o.cb[1] = Callback_Data(f, o)
         chkn(ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
-                   Cenum, (_Opt, Ptr{Void}, Any),
+                   Cenum, (_Opt, Ptr{Nothing}, Any),
                    o, nlopt_callback_wrapper_ptr,
                    o.cb[1]))
     end
@@ -453,7 +453,7 @@ for c in (:inequality, :equality)
     @eval function $cf(o::Opt, f::Function, tol::Real)
         push!(o.cb, Callback_Data(f, o))
         chkn(ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
-                   Cenum, (_Opt, Ptr{Void}, Any, Cdouble),
+                   Cenum, (_Opt, Ptr{Nothing}, Any, Cdouble),
                    o, nlopt_callback_wrapper_ptr,
                    o.cb[end], tol))
     end
@@ -476,7 +476,7 @@ const empty_jac = Array{Cdouble}(0,0) # for passing when grad == C_NULL
 
 function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
                                  n::Cuint, x::Ptr{Cdouble},
-                                 grad::Ptr{Cdouble}, d_::Ptr{Void})
+                                 grad::Ptr{Cdouble}, d_::Ptr{Nothing})
     d = unsafe_pointer_to_objref(d_)::Callback_Data
     try
         d.f(unsafe_wrap(Array, res, (convert(Int, m),)),
@@ -498,7 +498,7 @@ for c in (:inequality, :equality)
             push!(o.cb, Callback_Data(f, o))
             chkn(ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
                         libnlopt),
-                       Cenum, (_Opt, Cuint, Ptr{Void}, Any, Ptr{Cdouble}),
+                       Cenum, (_Opt, Cuint, Ptr{Nothing}, Any, Ptr{Cdouble}),
                        o, length(tol), nlopt_vcallback_wrapper_ptr,
                        o.cb[end], tol))
         end
@@ -518,7 +518,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     if length(x) != ndims(o)
         throw(BoundsError())
     end
-    opt_f = Array{Cdouble}(1)
+    opt_f = Array{Cdouble}(undef,1)
     ret = ccall((:nlopt_optimize,libnlopt), Cenum, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
@@ -526,7 +526,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
 end
 
 optimize{T<:Real}(o::Opt, x::AbstractVector{T}) =
-  optimize!(o, copy!(Array{Cdouble}(length(x)), x))
+  optimize!(o, copyto!(Array{Cdouble}(undef,length(x)), x))
 
 ############################################################################
 
