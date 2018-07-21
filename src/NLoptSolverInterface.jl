@@ -1,7 +1,7 @@
 
 
 export NLoptSolver
-immutable NLoptSolver <: SolverInterface.AbstractMathProgSolver
+struct NLoptSolver <: SolverInterface.AbstractMathProgSolver
     algorithm::Symbol
     stopval::Real
     ftol_rel::Real
@@ -30,7 +30,7 @@ function NLoptSolver(;algorithm::Symbol=:none, stopval::Real=NaN,
         vector_storage)
 end
 
-type NLoptMathProgModel <: SolverInterface.AbstractNonlinearModel
+mutable struct NLoptMathProgModel <: SolverInterface.AbstractNonlinearModel
     algorithm::Symbol
     opt # can't create Opt object on construction because it needs problem dimensions
     x::Vector{Float64}
