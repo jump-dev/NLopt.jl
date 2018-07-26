@@ -5,10 +5,10 @@ os:
 julia:
     - 0.7
     - nightly
-addons:
-    apt: # apt-get for linux
-        packages:
-            - libnlopt0 # We install it this way to be able to run Travis with `sudo: false`
+env:
+  matrix:
+    - FORCE_COMPILE_NLOPT=yes
+    - FORCE_COMPILE_NLOPT=no
 notifications:
     email: false
 sudo: false

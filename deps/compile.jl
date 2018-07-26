@@ -23,7 +23,7 @@ function compile(libname, tarball_url, hash; prefix=BinaryProvider.global_prefix
         run(`$cmake_executable -DNLOPT_CXX=On -DNLOPT_PYTHON=Off -DNLOPT_OCTAVE=Off -DNLOPT_MATLAB=Off -DNLOPT_GUILE=Off -DNLOPT_SWIG=Off -DNLOPT_LINK_PYTHON=Off ..`)
         run(`$cmake_executable --build .`)
         mkpath(libdir(prefix))
-        cp("blosc/libnlopt_cxx.$dlext", joinpath(libdir(prefix), libname*"."*dlext),
+        cp("libnlopt_cxx.$dlext", joinpath(libdir(prefix), libname*"."*dlext),
            remove_destination=true, follow_symlinks=true)
     end
 end

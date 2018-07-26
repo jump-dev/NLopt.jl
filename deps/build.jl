@@ -2,7 +2,7 @@ using BinaryProvider # requires BinaryProvider 0.3.0 or later
 include("compile.jl")
 
 # env var to force compilation from source, for testing purposes
-const forcecompile = get(ENV, "FORCE_COMPILE_nlopt", "no") == "yes"
+const forcecompile = get(ENV, "FORCE_COMPILE_NLOPT", "no") == "yes"
 
 # Parse some basic command-line arguments
 const verbose = ("--verbose" in ARGS) || forcecompile
@@ -33,8 +33,8 @@ download_info = Dict(
 )
 
 # source code tarball and hash for fallback compilation
-source_url = "https://github.com/stevengj/nlopt/releases/download/nlopt-2.4.2/nlopt-2.4.2.tar.gz"
-source_hash = "8099633de9d71cbc06cd435da993eb424bbcdbded8f803cdaa9fb8c6e09c8e89"
+source_url = "https://github.com/stevengj/nlopt/archive/v2.5.0.tar.gz"
+source_hash = "c6dd7a5701fff8ad5ebb45a3dc8e757e61d52658de3918e38bab233e7fd3b4ae"
 
 # Install unsatisfied or updated dependencies:
 unsatisfied = any(!satisfied(p; verbose=verbose) for p in products)
