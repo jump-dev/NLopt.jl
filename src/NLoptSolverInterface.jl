@@ -17,7 +17,7 @@ struct NLoptSolver <: SolverInterface.AbstractMathProgSolver
     vector_storage::Integer
 end
 
-function NLoptSolver(;algorithm::Symbol=:none, stopval::Real=NaN, 
+function NLoptSolver(;algorithm::Symbol=:none, stopval::Real=NaN,
     ftol_rel::Real=1e-7, ftol_abs::Real=NaN, xtol_rel::Real=1e-7,
     xtol_abs=nothing, constrtol_abs=1e-7,
     maxeval::Integer=0, maxtime::Real=0, initial_step=nothing,
@@ -86,11 +86,11 @@ function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, nu
     lower_bounds!(m.opt, x_l)
     upper_bounds!(m.opt, x_u)
 
-    eqidx = find(g_lb .== g_ub) # indices of equalities
-    ineqidx = find(g_lb .!= g_ub)
+    eqidx = findall(g_lb .== g_ub) # indices of equalities
+    ineqidx = findall(g_lb .!= g_ub)
 
     # map from eqidx/ineqidx to index in equalities/inequalities
-    constrmap = Array{Int}(numConstr)
+    constrmap = zeros(Int, numConstr)
     for i in 1:length(eqidx)
         constrmap[eqidx[i]] = i
     end
@@ -184,7 +184,7 @@ function SolverInterface.loadproblem!(m::NLoptMathProgModel, numVar::Integer, nu
             elseif isinf(g_ub[row])
                 result[constrmap[row]] = g_lb[row] - g_vec[row]
             else
-                result[constrmap[row]] = g_vec[row] - g_ub[row] 
+                result[constrmap[row]] = g_vec[row] - g_ub[row]
                 result[constrmap[row]+1] = g_lb[row] - g_vec[row]
             end
         end

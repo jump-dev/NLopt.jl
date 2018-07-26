@@ -1,6 +1,4 @@
-using JuMP
-using NLopt
-using Base.Test
+using JuMP, NLopt, Test
 
 m = Model(solver=NLoptSolver(algorithm=:LD_MMA))
 
