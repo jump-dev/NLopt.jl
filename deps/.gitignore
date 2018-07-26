@@ -1,5 +1,3 @@
 /deps.jl
-/builds
-/downloads
-/src
 /usr
+build.log

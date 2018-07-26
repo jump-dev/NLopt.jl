@@ -1,0 +1,14 @@
+[ Info: Downloading https://github.com/stevengj/NLoptBuilder/releases/download/v2.5.0-a1/NLopt.v1.0.0.x86_64-apple-darwin14.tar.gz to /Users/stevenj/.julia/dev/NLopt/deps/usr/downloads/NLopt.v1.0.0.x86_64-apple-darwin14.tar.gz...
+┌ Warning: `wait(t::Task)` is deprecated, use `fetch(t)` instead.
+│   caller = macro expansion at OutputCollector.jl:62 [inlined]
+└ @ Core ~/.julia/dev/BinaryProvider/src/OutputCollector.jl:62
+┌ Warning: `wait(t::Task)` is deprecated, use `fetch(t)` instead.
+│   caller = wait(::OutputCollector) at OutputCollector.jl:160
+└ @ BinaryProvider ~/.julia/dev/BinaryProvider/src/OutputCollector.jl:160
+┌ Warning: `wait(t::Task)` is deprecated, use `fetch(t)` instead.
+│   caller = wait(::OutputCollector) at OutputCollector.jl:161
+└ @ BinaryProvider ~/.julia/dev/BinaryProvider/src/OutputCollector.jl:161
+┌ Warning: `wait(t::Task)` is deprecated, use `fetch(t)` instead.
+│   caller = wait(::OutputCollector) at OutputCollector.jl:165
+└ @ BinaryProvider ~/.julia/dev/BinaryProvider/src/OutputCollector.jl:165
+[16:46:26] [16:46:26] ######################################################################## 100.0%[16:46:26] ######################################################################## 100.0%[16:46:26] ###                                                                        5.2%[16:46:26] ##########################                                                37.0%[16:46:26] #############################################################             84.8%[16:46:26] ######################################################################## 100.0%

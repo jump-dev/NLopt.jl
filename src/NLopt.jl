@@ -13,19 +13,14 @@ import MathProgBase.SolverInterface
 import MathProgBase.SolverInterface.optimize!
 
 import Libdl
-const depfile = joinpath(dirname(@__FILE__),"..","deps","deps.jl")
-if isfile(depfile)
-    include(depfile)
-else
-    error("NLopt not properly installed. Please run Pkg.build(\"NLopt\")")
+const depsjl_path = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
+if !isfile(depsjl_path)
+    error("NLopt not installed properly; run Pkg.build(\"NLopt\"), restart Julia, and try again.")
 end
-
-############################################################################
-# separate initializations that must occur at runtime, for precompilation
+include(depsjl_path)
 
 function __init__()
-    # get the version of NLopt at runtime, not compile time
-    global NLOPT_VERSION = version()
+    check_deps()
 end
 
 ############################################################################
@@ -377,6 +372,8 @@ function version()
           pv, pv + sizeof(Cint), pv + 2*sizeof(Cint))
     VersionNumber(convert(Int, v[1]),convert(Int, v[2]),convert(Int, v[3]))
 end
+
+const NLOPT_VERSION = version()
 
 ############################################################################
 
