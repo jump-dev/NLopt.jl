@@ -1,5 +1,4 @@
-using NLopt
-using Base.Test
+using NLopt, Test
 
 count = 0 # keep track of # function evaluations
 
