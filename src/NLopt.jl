@@ -219,22 +219,30 @@ struct ForcedStop <: Exception end
 # cache current exception for forced stop
 nlopt_exception = nothing
 
+errmsg(o::Opt) =
+    unsafe_string(ccall((:nlopt_get_errmsg,libnlopt), Ptr{UInt8}, (_Opt,), o))
+
+function _errmsg(o::Opt)
+    s = errmsg(o)
+    return isempty(s) ? s : ": "*s
+end
+
 # check result and throw an exception if necessary
-function chk(result::Result)
+function chk(o::Opt, result::Result)
     if result < 0 && result != ROUNDOFF_LIMITED
         if result == INVALID_ARGS
-            throw(ArgumentError("invalid NLopt arguments"))
+            throw(ArgumentError("invalid NLopt arguments"*_errmsg(o)))
         elseif result == OUT_OF_MEMORY
             throw(OutOfMemoryError())
         elseif result == FORCED_STOP
             global nlopt_exception
             e = nlopt_exception
-            if e != nothing && !isa(e, ForcedStop)
+            if e !== nothing && !isa(e, ForcedStop)
                 nlopt_exception = nothing
                 rethrow(e)
             end
         else
-            error("nlopt failure: $result")
+            error("nlopt failure $result", _errmsg(o))
         end
     end
     return nothing
@@ -254,7 +262,7 @@ macro GETSET(T, p)
         $(esc(p))(o::Opt) = ccall(($(qsym("nlopt_get_", p)),libnlopt),
                                   $T, (_Opt,), o)
         $(esc(ps))(o::Opt, val::$Tg) =
-          chk(ccall(($(qsym("nlopt_set_", p)),libnlopt),
+          chk(o, ccall(($(qsym("nlopt_set_", p)),libnlopt),
                      Result, (_Opt, $T), o, val))
     end
 end
@@ -267,7 +275,7 @@ macro GETSET_VEC(p)
             if length(v) != ndims(o)
                 throw(BoundsError())
             end
-            chk(ccall(($(qsym("nlopt_get_", p)),libnlopt),
+            chk(o, ccall(($(qsym("nlopt_get_", p)),libnlopt),
                       Result, (_Opt, Ptr{Cdouble}), o, v))
             v
         end
@@ -276,13 +284,13 @@ macro GETSET_VEC(p)
             if length(v) != ndims(o)
                 throw(BoundsError())
             end
-            chk(ccall(($(qsym("nlopt_set_", p)),libnlopt),
+            chk(o, ccall(($(qsym("nlopt_set_", p)),libnlopt),
                       Result, (_Opt, Ptr{Cdouble}), o, v))
         end
         $(esc(ps))(o::Opt, v::AbstractVector{<:Real}) =
           $(esc(ps))(o, Array{Cdouble}(v))
         $(esc(ps))(o::Opt, val::Real) =
-          chk(ccall(($(qsym("nlopt_set_", p, "1")),libnlopt),
+          chk(o, ccall(($(qsym("nlopt_set_", p, "1")),libnlopt),
                      Result, (_Opt, Cdouble), o, val))
     end
 end
@@ -306,7 +314,7 @@ end
 force_stop!(o::Opt) = force_stop!(o, 1)
 
 local_optimizer!(o::Opt, lo::Opt) =
-  chk(ccall((:nlopt_set_local_optimizer,libnlopt),
+  chk(o, ccall((:nlopt_set_local_optimizer,libnlopt),
              Result, (_Opt, _Opt), o, lo))
 
 # the initial-stepsize stuff is a bit different than GETSET_VEC,
@@ -316,7 +324,7 @@ function default_initial_step!(o::Opt, x::Vector{Cdouble})
     if length(x) != ndims(o)
         throw(BoundsError())
     end
-    chk(ccall((:nlopt_set_default_initial_step,libnlopt),
+    chk(o, ccall((:nlopt_set_default_initial_step,libnlopt),
                Result, (_Opt, Ptr{Cdouble}), o, x))
 end
 default_initial_step!(o::Opt, x::AbstractVector{<:Real}) =
@@ -326,20 +334,20 @@ function initial_step!(o::Opt, dx::Vector{Cdouble})
     if length(dx) != ndims(o)
         throw(BoundsError())
     end
-    chk(ccall((:nlopt_set_initial_step,libnlopt),
+    chk(o, ccall((:nlopt_set_initial_step,libnlopt),
                Result, (_Opt, Ptr{Cdouble}), o, dx))
 end
 initial_step!(o::Opt, dx::AbstractVector{<:Real}) =
   initial_step!(o, Array{Cdouble}(dx))
 initial_step!(o::Opt, dx::Real) =
-  chk(ccall((:nlopt_set_initial_step1,libnlopt),
+  chk(o, ccall((:nlopt_set_initial_step1,libnlopt),
              Result, (_Opt, Cdouble), o, dx))
 
 function initial_step(o::Opt, x::Vector{Cdouble}, dx::Vector{Cdouble})
     if length(x) != ndims(o) || length(dx) != ndims(o)
         throw(BoundsError())
     end
-    chk(ccall((:nlopt_get_initial_step,libnlopt),
+    chk(o, ccall((:nlopt_get_initial_step,libnlopt),
                Result, (_Opt, Ptr{Cdouble}, Ptr{Cdouble}), o, x, dx))
     dx
 end
@@ -407,7 +415,6 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
     catch e
         global nlopt_exception
         nlopt_exception = e
-        println("in callback catch")
         force_stop!(d.o::Opt)
         return 0.0 # ignored by nlopt
     end
@@ -419,7 +426,7 @@ for m in (:min, :max)
         o.cb[1] = Callback_Data(f, o)
         nlopt_callback_wrapper_ptr = @cfunction(nlopt_callback_wrapper,
             Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
-        chk(ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
+        chk(o, ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
                    Result, (_Opt, Ptr{Cvoid}, Any),
                    o, nlopt_callback_wrapper_ptr,
                    o.cb[1]))
@@ -435,7 +442,7 @@ for c in (:inequality, :equality)
         push!(o.cb, Callback_Data(f, o))
         nlopt_callback_wrapper_ptr = @cfunction(nlopt_callback_wrapper,
             Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
-        chk(ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
+        chk(o, ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
                    Result, (_Opt, Ptr{Cvoid}, Any, Cdouble),
                    o, nlopt_callback_wrapper_ptr,
                    o.cb[end], tol))
@@ -445,9 +452,9 @@ end
 
 function remove_constraints!(o::Opt)
     resize!(o.cb, 1)
-    chk(ccall((:nlopt_remove_inequality_constraints,libnlopt),
+    chk(o, ccall((:nlopt_remove_inequality_constraints,libnlopt),
                Result, (_Opt,), o))
-    chk(ccall((:nlopt_remove_equality_constraints,libnlopt),
+    chk(o, ccall((:nlopt_remove_equality_constraints,libnlopt),
                Result, (_Opt,), o))
 end
 
@@ -481,7 +488,7 @@ for c in (:inequality, :equality)
             push!(o.cb, Callback_Data(f, o))
             nlopt_vcallback_wrapper_ptr = @cfunction(nlopt_vcallback_wrapper, Cvoid,
                   (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
-            chk(ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
+            chk(o, ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
                         libnlopt),
                        Result, (_Opt, Cuint, Ptr{Cvoid}, Any, Ptr{Cdouble}),
                        o, length(tol), nlopt_vcallback_wrapper_ptr,
@@ -507,6 +514,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     ret = ccall((:nlopt_optimize,libnlopt), Result, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
+    ret == INVALID_ARGS && chk(o, ret)
     return (opt_f[1], x, Symbol(ret))
 end
 
