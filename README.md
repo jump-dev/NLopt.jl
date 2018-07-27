@@ -61,19 +61,12 @@ problem from the [NLopt Tutorial](http://ab-initio.mit.edu/wiki/index.php/NLopt_
 ```julia
 using NLopt
 
-count = 0 # keep track of # function evaluations
-
 function myfunc(x::Vector, grad::Vector)
     if length(grad) > 0
         grad[1] = 0
         grad[2] = 0.5/sqrt(x[2])
     end
-
-    global count
-    count::Int += 1
-    println("f_$count($x)")
-
-    sqrt(x[2])
+    return sqrt(x[2])
 end
 
 function myconstraint(x::Vector, grad::Vector, a, b)
@@ -93,6 +86,7 @@ inequality_constraint!(opt, (x,g) -> myconstraint(x,g,2,0), 1e-8)
 inequality_constraint!(opt, (x,g) -> myconstraint(x,g,-1,1), 1e-8)
 
 (minf,minx,ret) = optimize(opt, [1.234, 5.678])
+count = numevals(opt) # the number of function evaluations
 println("got $minf at $minx after $count iterations (returned $ret)")
 ```
 

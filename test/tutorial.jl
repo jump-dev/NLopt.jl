@@ -38,3 +38,4 @@ println("got $minf at $minx after $count iterations (returned $ret)")
 @test minx[2] ≈ 8/27 rtol=1e-5
 @test minf ≈ sqrt(8/27) rtol=1e-5
 @test ret == :XTOL_REACHED
+@test numevals(opt) == count

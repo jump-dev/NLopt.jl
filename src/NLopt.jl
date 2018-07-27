@@ -2,12 +2,10 @@ __precompile__()
 
 module NLopt
 
-export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
+export Opt, NLOPT_VERSION, algorithm, algorithm_name, numevals, ForcedStop,
        lower_bounds!, lower_bounds, upper_bounds!, upper_bounds, stopval!, stopval, ftol_rel!, ftol_rel, ftol_abs!, ftol_abs, xtol_rel!, xtol_rel, xtol_abs!, xtol_abs, maxeval!, maxeval, maxtime!, maxtime, force_stop!, force_stop, force_stop!, population!, population, vector_storage!, vector_storage, initial_step!, initial_step, default_initial_step!, local_optimizer!,
        min_objective!, max_objective!, equality_constraint!, inequality_constraint!, remove_constraints!,
        optimize!, optimize, Algorithm, Result
-
-import Base.ndims, Base.copy, Base.convert, Base.show
 
 import MathProgBase.SolverInterface
 import MathProgBase.SolverInterface.optimize!
@@ -21,6 +19,8 @@ include(depsjl_path)
 
 function __init__()
     check_deps()
+    v = version()
+    v >= v"2.5" || error("NLopt $v < 2.5 is too old")
 end
 
 ############################################################################
@@ -93,6 +93,9 @@ end
 # so that result < 0 checks continue to work
 Base.isless(x::Integer, r::Result) = isless(x, Cint(r))
 Base.isless(r::Result, x::Integer) = isless(Cint(r), x)
+# so that == :Foo checks continue to work
+Base.:(==)(s::Symbol, r::Result) = s == Symbol(r)
+Base.:(==)(r::Result, s::Symbol) = s == r
 
 ############################################################################
 # wrapper around nlopt_opt type
@@ -137,10 +140,10 @@ Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
 
 destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Cvoid, (_Opt,), o)
 
-ndims(o::Opt) = Int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
+Base.ndims(o::Opt) = Int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
 algorithm(o::Opt) = ccall((:nlopt_get_algorithm,libnlopt), Algorithm, (_Opt,), o)
 
-show(io::IO, o::Opt) = print(io, "Opt(:$(algorithm(o)), $(ndims(o)))")
+Base.show(io::IO, o::Opt) = print(io, "Opt($(algorithm(o)), $(ndims(o)))")
 
 ############################################################################
 # copying is a little tricky because we have to tell NLopt to use
@@ -152,7 +155,7 @@ function munge_callback(p::Ptr{Cvoid}, f_::Ptr{Cvoid})
     f(p)::Ptr{Cvoid}
 end
 
-function copy(o::Opt)
+function Base.copy(o::Opt)
     p = ccall((:nlopt_copy,libnlopt), _Opt, (_Opt,), o)
     if p == C_NULL
         error("Error in nlopt_copy")
@@ -365,6 +368,8 @@ function Base.show(io::IO, ::MIME"text/plain", a::Algorithm)
     show(io, a)
     print(io, ": ", algorithm_name(a))
 end
+
+numevals(o::Opt) = ccall((:nlopt_get_numevals,libnlopt), Cint, (_Opt,), o)
 
 ############################################################################
 
