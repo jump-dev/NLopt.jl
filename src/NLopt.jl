@@ -2,7 +2,7 @@ __precompile__()
 
 module NLopt
 
-export Opt, NLOPT_VERSION, algorithm, algorithm_name, numevals, ForcedStop,
+export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
        lower_bounds!, lower_bounds, upper_bounds!, upper_bounds, stopval!, stopval, ftol_rel!, ftol_rel, ftol_abs!, ftol_abs, xtol_rel!, xtol_rel, xtol_abs!, xtol_abs, maxeval!, maxeval, maxtime!, maxtime, force_stop!, force_stop, force_stop!, population!, population, vector_storage!, vector_storage, initial_step!, initial_step, default_initial_step!, local_optimizer!,
        min_objective!, max_objective!, equality_constraint!, inequality_constraint!, remove_constraints!,
        optimize!, optimize, Algorithm, Result
@@ -136,7 +136,7 @@ mutable struct Opt
                                              end, n)
 end
 
-Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
+Base.unsafe_convert(::Type{_Opt}, o::Opt) = getfield(o, :opt) # for passing to ccall
 
 destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Cvoid, (_Opt,), o)
 
@@ -162,12 +162,13 @@ function Base.copy(o::Opt)
     end
     n = Opt(p)
 
-    n.cb = similar(o.cb)
-    for i = 1:length(o.cb)
+    cb = getfield(o.cb)
+    n.cb = similar(cb)
+    for i = 1:length(cb)
         try
-            n.cb[i] = Callback_Data(o.cb[i].f, n)
+            n.cb[i] = Callback_Data(cb[i].f, n)
         catch e
-            # if objective has not been set, o.cb[1] will throw
+            # if objective has not been set, cb[1] will throw
             # an UndefRefError, which is okay.
             if i != 1 || !isa(e, UndefRefError)
                 rethrow(e) # some not-okay exception
@@ -183,9 +184,9 @@ function Base.copy(o::Opt)
         # dictionary to convert pointers to indices into o.cb, whence
         # we obtain the corresponding element of n.cb.
         cbi = Dict{Ptr{Cvoid},Int}()
-        for i in 1:length(o.cb)
+        for i in 1:length(cb)
             try
-                cbi[pointer_from_objref(o.cb[i])] = i
+                cbi[pointer_from_objref(cb[i])] = i
             catch
             end
         end
@@ -199,9 +200,9 @@ function Base.copy(o::Opt)
         # nlopt_munge_data not available, punt unless there is
         # no callback data
         try
-            o.cb[1]
+            cb[1]
         catch e
-            if length(o.cb) == 1 && isa(e, UndefRefError)
+            if length(cb) == 1 && isa(e, UndefRefError)
                 return n
             end
         end
@@ -219,12 +220,14 @@ struct ForcedStop <: Exception end
 # cache current exception for forced stop
 nlopt_exception = nothing
 
-errmsg(o::Opt) =
-    unsafe_string(ccall((:nlopt_get_errmsg,libnlopt), Ptr{UInt8}, (_Opt,), o))
+function errmsg(o::Opt)
+    msg = ccall((:nlopt_get_errmsg,libnlopt), Ptr{UInt8}, (_Opt,), o)
+    return msg == C_NULL ? nothing : unsafe_string(msg)
+end
 
 function _errmsg(o::Opt)
     s = errmsg(o)
-    return isempty(s) ? s : ": "*s
+    return s === nothing || isempty(s) ? "" : ": "*s
 end
 
 # check result and throw an exception if necessary
@@ -423,13 +426,13 @@ end
 for m in (:min, :max)
     mf = Symbol(string(m,"_objective!"))
     @eval function $mf(o::Opt, f::Function)
-        o.cb[1] = Callback_Data(f, o)
+        getfield(o, :cb)[1] = Callback_Data(f, o)
         nlopt_callback_wrapper_ptr = @cfunction(nlopt_callback_wrapper,
             Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
         chk(o, ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
                    Result, (_Opt, Ptr{Cvoid}, Any),
                    o, nlopt_callback_wrapper_ptr,
-                   o.cb[1]))
+                   getfield(o, :cb)[1]))
     end
 end
 
@@ -438,23 +441,22 @@ end
 
 for c in (:inequality, :equality)
     cf = Symbol(string(c, "_constraint!"))
-    @eval function $cf(o::Opt, f::Function, tol::Real)
-        push!(o.cb, Callback_Data(f, o))
+    @eval function $cf(o::Opt, f::Function, tol::Real=0.0)
+        push!(getfield(o, :cb), Callback_Data(f, o))
         nlopt_callback_wrapper_ptr = @cfunction(nlopt_callback_wrapper,
             Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
         chk(o, ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
                    Result, (_Opt, Ptr{Cvoid}, Any, Cdouble),
                    o, nlopt_callback_wrapper_ptr,
-                   o.cb[end], tol))
+                   getfield(o, :cb)[end], tol))
     end
-    @eval $cf(o::Opt, f::Function) = $cf(o, f, 0.0)
 end
 
 function remove_constraints!(o::Opt)
-    resize!(o.cb, 1)
-    chk(o, ccall((:nlopt_remove_inequality_constraints,libnlopt),
+    resize!(getfield(o, :cb), 1)
+    chkn(ccall((:nlopt_remove_inequality_constraints,libnlopt),
                Result, (_Opt,), o))
-    chk(o, ccall((:nlopt_remove_equality_constraints,libnlopt),
+    chkn(ccall((:nlopt_remove_equality_constraints,libnlopt),
                Result, (_Opt,), o))
 end
 
@@ -485,23 +487,111 @@ for c in (:inequality, :equality)
     cf = Symbol(string(c, "_constraint!"))
     @eval begin
         function $cf(o::Opt, f::Function, tol::Vector{Cdouble})
-            push!(o.cb, Callback_Data(f, o))
+            push!(getfield(o, :cb), Callback_Data(f, o))
             nlopt_vcallback_wrapper_ptr = @cfunction(nlopt_vcallback_wrapper, Cvoid,
                   (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
             chk(o, ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
                         libnlopt),
                        Result, (_Opt, Cuint, Ptr{Cvoid}, Any, Ptr{Cdouble}),
                        o, length(tol), nlopt_vcallback_wrapper_ptr,
-                       o.cb[end], tol))
+                       getfield(o, :cb)[end], tol))
         end
         $cf(o::Opt, f::Function, tol::AbstractVector{<:Real}) =
            $cf(o, f, Array{Float64}(tol))
-        $cf(o::Opt, m::Integer, f::Function, tol::Real) =
+        $cf(o::Opt, m::Integer, f::Function, tol::Real=0.0) =
            $cf(o, f, fill!(Cdouble(tol), m))
-        $cf(o::Opt, m::Integer, f::Function)=
-           $cf(o, m, f, 0.0)
     end
 end
+
+############################################################################
+# property-based getters setters opt.foo for Julia 0.7
+# … at some point we will deprecate the old interface.
+
+function Base.getproperty(o::Opt, p::Symbol)
+    if p === :lower_bounds
+        return lower_bounds(o)
+    elseif p === :upper_bounds
+        return upper_bounds(o)
+    elseif p === :stopval
+        return stopval(o)
+    elseif p === :ftol_rel
+        return ftol_rel(o)
+    elseif p === :ftol_abs
+        return ftol_abs(o)
+    elseif p === :xtol_rel
+        return xtol_rel(o)
+    elseif p === :xtol_abs
+        return xtol_abs(o)
+    elseif p === :maxeval
+        return maxeval(o)
+    elseif p === :maxtime
+        return maxtime(o)
+    elseif p === :force_stop
+        return force_stop(o)
+    elseif p === :population
+        return population(o)
+    elseif p === :vector_storage
+        return vector_storage(o)
+    elseif p === :initial_step
+        return initial_step(o)
+    elseif p === :algorithm
+        return algorithm(o)
+    elseif p === :numevals
+        return numevals(o)
+    elseif p === :errmsg
+        return errmsg(o)
+    else
+        error("type Opt has no readable property $p")
+    end
+end
+
+function Base.setproperty!(o::Opt, p::Symbol, x)
+    if p === :lower_bounds
+        lower_bounds!(o, x)
+    elseif p === :upper_bounds
+        upper_bounds!(o, x)
+    elseif p === :stopval
+        stopval!(o, x)
+    elseif p === :ftol_rel
+        ftol_rel!(o, x)
+    elseif p === :ftol_abs
+        ftol_abs!(o, x)
+    elseif p === :xtol_rel
+        xtol_rel!(o, x)
+    elseif p === :xtol_abs
+        xtol_abs!(o, x)
+    elseif p === :maxeval
+        maxeval!(o, x)
+    elseif p === :maxtime
+        maxtime!(o, x)
+    elseif p === :force_stop
+        force_stop!(o, x)
+    elseif p === :population
+        population!(o, x)
+    elseif p === :vector_storage
+        vector_storage!(o, x)
+    elseif p === :local_optimizer
+        local_optimizer!(o, x)
+    elseif p === :default_initial_step
+        default_initial_step!(o, x)
+    elseif p === :initial_step
+        initial_step!(o, x)
+    elseif p === :min_objective
+        min_objective!(o, x)
+    elseif p === :max_objective
+        max_objective!(o, x)
+    elseif p === :inequality_constraint
+        inequality_constraint!(o, x)
+    elseif p === :equality_constraint
+        equality_constraint!(o, x)
+    else
+        error("type Opt has no writable property $p")
+    end
+    return x
+end
+
+Base.propertynames(o::Opt) =
+   (:lower_bounds, :upper_bounds, :stopval, :ftol_rel, :ftol_abs, :xtol_rel, :xtol_abs, :maxeval, :maxtime, :force_stop, :population, :vector_storage, :initial_step, :algorithm, :local_optimizer, :default_initial_step, :initial_step, :min_objective, :max_objective, :inequality_constraint, :equality_constraint, :numevals, :errmsg)
 
 ############################################################################
 # Perform the optimization:
