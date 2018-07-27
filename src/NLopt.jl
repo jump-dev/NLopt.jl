@@ -2,12 +2,10 @@ __precompile__()
 
 module NLopt
 
-export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
+export Opt, NLOPT_VERSION, algorithm, algorithm_name, numevals, ForcedStop,
        lower_bounds!, lower_bounds, upper_bounds!, upper_bounds, stopval!, stopval, ftol_rel!, ftol_rel, ftol_abs!, ftol_abs, xtol_rel!, xtol_rel, xtol_abs!, xtol_abs, maxeval!, maxeval, maxtime!, maxtime, force_stop!, force_stop, force_stop!, population!, population, vector_storage!, vector_storage, initial_step!, initial_step, default_initial_step!, local_optimizer!,
        min_objective!, max_objective!, equality_constraint!, inequality_constraint!, remove_constraints!,
-       optimize!, optimize
-
-import Base.ndims, Base.copy, Base.convert, Base.show
+       optimize!, optimize, Algorithm, Result
 
 import MathProgBase.SolverInterface
 import MathProgBase.SolverInterface.optimize!
@@ -21,74 +19,83 @@ include(depsjl_path)
 
 function __init__()
     check_deps()
+    v = version()
+    v >= v"2.5" || error("NLopt $v < 2.5 is too old")
 end
 
 ############################################################################
 # Mirrors of NLopt's C enum constants:
 
-# enum nlopt_algorithm
-const GN_DIRECT = Cint(0)
-const GN_DIRECT_L = Cint(1)
-const GN_DIRECT_L_RAND = Cint(2)
-const GN_DIRECT_NOSCAL = Cint(3)
-const GN_DIRECT_L_NOSCAL = Cint(4)
-const GN_DIRECT_L_RAND_NOSCAL = Cint(5)
-const GN_ORIG_DIRECT = Cint(6)
-const GN_ORIG_DIRECT_L = Cint(7)
-const GD_STOGO = Cint(8)
-const GD_STOGO_RAND = Cint(9)
-const LD_LBFGS_NOCEDAL = Cint(10)
-const LD_LBFGS = Cint(11)
-const LN_PRAXIS = Cint(12)
-const LD_VAR1 = Cint(13)
-const LD_VAR2 = Cint(14)
-const LD_TNEWTON = Cint(15)
-const LD_TNEWTON_RESTART = Cint(16)
-const LD_TNEWTON_PRECOND = Cint(17)
-const LD_TNEWTON_PRECOND_RESTART = Cint(18)
-const GN_CRS2_LM = Cint(19)
-const GN_MLSL = Cint(20)
-const GD_MLSL = Cint(21)
-const GN_MLSL_LDS = Cint(22)
-const GD_MLSL_LDS = Cint(23)
-const LD_MMA = Cint(24)
-const LN_COBYLA = Cint(25)
-const LN_NEWUOA = Cint(26)
-const LN_NEWUOA_BOUND = Cint(27)
-const LN_NELDERMEAD = Cint(28)
-const LN_SBPLX = Cint(29)
-const LN_AUGLAG = Cint(30)
-const LD_AUGLAG = Cint(31)
-const LN_AUGLAG_EQ = Cint(32)
-const LD_AUGLAG_EQ = Cint(33)
-const LN_BOBYQA = Cint(34)
-const GN_ISRES = Cint(35)
-const AUGLAG = Cint(36)
-const AUGLAG_EQ = Cint(37)
-const G_MLSL = Cint(38)
-const G_MLSL_LDS = Cint(39)
-const LD_SLSQP = Cint(40)
-const LD_CCSAQ = Cint(41)
-const GN_ESCH = Cint(42)
-const NUM_ALGORITHMS = 43
+@enum Algorithm::Cint begin
+    GN_DIRECT=0
+    GN_DIRECT_L=1
+    GN_DIRECT_L_RAND=2
+    GN_DIRECT_NOSCAL=3
+    GN_DIRECT_L_NOSCAL=4
+    GN_DIRECT_L_RAND_NOSCAL=5
+    GN_ORIG_DIRECT=6
+    GN_ORIG_DIRECT_L=7
+    GD_STOGO=8
+    GD_STOGO_RAND=9
+    LD_LBFGS_NOCEDAL=10
+    LD_LBFGS=11
+    LN_PRAXIS=12
+    LD_VAR1=13
+    LD_VAR2=14
+    LD_TNEWTON=15
+    LD_TNEWTON_RESTART=16
+    LD_TNEWTON_PRECOND=17
+    LD_TNEWTON_PRECOND_RESTART=18
+    GN_CRS2_LM=19
+    GN_MLSL=20
+    GD_MLSL=21
+    GN_MLSL_LDS=22
+    GD_MLSL_LDS=23
+    LD_MMA=24
+    LN_COBYLA=25
+    LN_NEWUOA=26
+    LN_NEWUOA_BOUND=27
+    LN_NELDERMEAD=28
+    LN_SBPLX=29
+    LN_AUGLAG=30
+    LD_AUGLAG=31
+    LN_AUGLAG_EQ=32
+    LD_AUGLAG_EQ=33
+    LN_BOBYQA=34
+    GN_ISRES=35
+    AUGLAG=36
+    AUGLAG_EQ=37
+    G_MLSL=38
+    G_MLSL_LDS=39
+    LD_SLSQP=40
+    LD_CCSAQ=41
+    GN_ESCH=42
+    GN_AGS=43
+end
 
-const alg2int = Dict{Symbol,Cint}(:GN_DIRECT=>GN_DIRECT, :GN_DIRECT_L=>GN_DIRECT_L, :GN_DIRECT_L_RAND=>GN_DIRECT_L_RAND, :GN_DIRECT_NOSCAL=>GN_DIRECT_NOSCAL, :GN_DIRECT_L_NOSCAL=>GN_DIRECT_L_NOSCAL, :GN_DIRECT_L_RAND_NOSCAL=>GN_DIRECT_L_RAND_NOSCAL, :GN_ORIG_DIRECT=>GN_ORIG_DIRECT, :GN_ORIG_DIRECT_L=>GN_ORIG_DIRECT_L, :GD_STOGO=>GD_STOGO, :GD_STOGO_RAND=>GD_STOGO_RAND, :LD_LBFGS_NOCEDAL=>LD_LBFGS_NOCEDAL, :LD_LBFGS=>LD_LBFGS, :LN_PRAXIS=>LN_PRAXIS, :LD_VAR1=>LD_VAR1, :LD_VAR2=>LD_VAR2, :LD_TNEWTON=>LD_TNEWTON, :LD_TNEWTON_RESTART=>LD_TNEWTON_RESTART, :LD_TNEWTON_PRECOND=>LD_TNEWTON_PRECOND, :LD_TNEWTON_PRECOND_RESTART=>LD_TNEWTON_PRECOND_RESTART, :GN_CRS2_LM=>GN_CRS2_LM, :GN_MLSL=>GN_MLSL, :GD_MLSL=>GD_MLSL, :GN_MLSL_LDS=>GN_MLSL_LDS, :GD_MLSL_LDS=>GD_MLSL_LDS, :LD_MMA=>LD_MMA, :LN_COBYLA=>LN_COBYLA, :LN_NEWUOA=>LN_NEWUOA, :LN_NEWUOA_BOUND=>LN_NEWUOA_BOUND, :LN_NELDERMEAD=>LN_NELDERMEAD, :LN_SBPLX=>LN_SBPLX, :LN_AUGLAG=>LN_AUGLAG, :LD_AUGLAG=>LD_AUGLAG, :LN_AUGLAG_EQ=>LN_AUGLAG_EQ, :LD_AUGLAG_EQ=>LD_AUGLAG_EQ, :LN_BOBYQA=>LN_BOBYQA, :GN_ISRES=>GN_ISRES, :AUGLAG=>AUGLAG, :AUGLAG_EQ=>AUGLAG_EQ, :G_MLSL=>G_MLSL, :G_MLSL_LDS=>G_MLSL_LDS, :LD_SLSQP=>LD_SLSQP, :LD_CCSAQ=>LD_CCSAQ, :GN_ESCH=>GN_ESCH)
-const int2alg = Dict{Cint,Symbol}(alg2int[k]=>k for k in keys(alg2int))
+const sym2alg = Dict(Symbol(i)=>i for i in instances(Algorithm))
 
 # enum nlopt_result
-const FAILURE = Cint(-1)
-const INVALID_ARGS = Cint(-2)
-const OUT_OF_MEMORY = Cint(-3)
-const ROUNDOFF_LIMITED = Cint(-4)
-const FORCED_STOP = Cint(-5)
-const SUCCESS = Cint(1)
-const STOPVAL_REACHED = Cint(2)
-const FTOL_REACHED = Cint(3)
-const XTOL_REACHED = Cint(4)
-const MAXEVAL_REACHED = Cint(5)
-const MAXTIME_REACHED = Cint(6)
+@enum Result::Cint begin
+    FORCED_STOP=-5
+    ROUNDOFF_LIMITED=-4
+    OUT_OF_MEMORY=-3
+    INVALID_ARGS=-2
+    FAILURE=-1
+    SUCCESS=1
+    STOPVAL_REACHED=2
+    FTOL_REACHED=3
+    XTOL_REACHED=4
+    MAXEVAL_REACHED=5
+    MAXTIME_REACHED=6
+end
 
-const res2sym = Dict{Cint,Symbol}(FAILURE=>:FAILURE, INVALID_ARGS=>:INVALID_ARGS, OUT_OF_MEMORY=>:OUT_OF_MEMORY, ROUNDOFF_LIMITED=>:ROUNDOFF_LIMITED, FORCED_STOP=>:FORCED_STOP, SUCCESS=>:SUCCESS, STOPVAL_REACHED=>:STOPVAL_REACHED, FTOL_REACHED=>:FTOL_REACHED, XTOL_REACHED=>:XTOL_REACHED, MAXEVAL_REACHED=>:MAXEVAL_REACHED, MAXTIME_REACHED=>:MAXTIME_REACHED)
+# so that result < 0 checks continue to work
+Base.isless(x::Integer, r::Result) = isless(x, Cint(r))
+Base.isless(r::Result, x::Integer) = isless(Cint(r), x)
+# so that == :Foo checks continue to work
+Base.:(==)(s::Symbol, r::Result) = s == Symbol(r)
+Base.:(==)(r::Result, s::Symbol) = s == r
 
 ############################################################################
 # wrapper around nlopt_opt type
@@ -113,20 +120,17 @@ mutable struct Opt
         finalizer(destroy,opt)
         opt
     end
-    function Opt(algorithm::Integer, n::Integer)
-        if algorithm < 0 || algorithm > NUM_ALGORITHMS
-            throw(ArgumentError("invalid algorithm $algorithm"))
-        elseif n < 0
-            throw(ArgumentError("invalid dimension $n < 0"))
-        end
-        p = ccall((:nlopt_create,libnlopt), _Opt, (Cint, Cuint),
+    function Opt(algorithm::Algorithm, n::Integer)
+        n >= 0 || throw(ArgumentError("invalid dimension $n < 0"))
+        p = ccall((:nlopt_create,libnlopt), _Opt, (Algorithm, Cuint),
                   algorithm, n)
         if p == C_NULL
             error("Error in nlopt_create")
         end
         Opt(p)
     end
-    Opt(algorithm::Symbol, n::Integer) = Opt(try alg2int[algorithm]
+    Opt(alg::Integer, n::Integer) = Opt(Algorithm(alg), n)
+    Opt(algorithm::Symbol, n::Integer) = Opt(try sym2alg[algorithm]
                                              catch
                          throw(ArgumentError("unknown algorithm $algorithm"))
                                              end, n)
@@ -136,11 +140,10 @@ Base.unsafe_convert(::Type{_Opt}, o::Opt) = o.opt # for passing to ccall
 
 destroy(o::Opt) = ccall((:nlopt_destroy,libnlopt), Cvoid, (_Opt,), o)
 
-ndims(o::Opt) = Int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
-algorithm(o::Opt) = int2alg[ccall((:nlopt_get_algorithm,libnlopt),
-                                  Cint, (_Opt,), o)]
+Base.ndims(o::Opt) = Int(ccall((:nlopt_get_dimension,libnlopt), Cuint, (_Opt,), o))
+algorithm(o::Opt) = ccall((:nlopt_get_algorithm,libnlopt), Algorithm, (_Opt,), o)
 
-show(io::IO, o::Opt) = print(io, "Opt(:$(algorithm(o)), $(ndims(o)))")
+Base.show(io::IO, o::Opt) = print(io, "Opt($(algorithm(o)), $(ndims(o)))")
 
 ############################################################################
 # copying is a little tricky because we have to tell NLopt to use
@@ -152,7 +155,7 @@ function munge_callback(p::Ptr{Cvoid}, f_::Ptr{Cvoid})
     f(p)::Ptr{Cvoid}
 end
 
-function copy(o::Opt)
+function Base.copy(o::Opt)
     p = ccall((:nlopt_copy,libnlopt), _Opt, (_Opt,), o)
     if p == C_NULL
         error("Error in nlopt_copy")
@@ -216,29 +219,34 @@ struct ForcedStop <: Exception end
 # cache current exception for forced stop
 nlopt_exception = nothing
 
+errmsg(o::Opt) =
+    unsafe_string(ccall((:nlopt_get_errmsg,libnlopt), Ptr{UInt8}, (_Opt,), o))
+
+function _errmsg(o::Opt)
+    s = errmsg(o)
+    return isempty(s) ? s : ": "*s
+end
+
 # check result and throw an exception if necessary
-function chk(result::Integer)
+function chk(o::Opt, result::Result)
     if result < 0 && result != ROUNDOFF_LIMITED
         if result == INVALID_ARGS
-            throw(ArgumentError("invalid NLopt arguments"))
+            throw(ArgumentError("invalid NLopt arguments"*_errmsg(o)))
         elseif result == OUT_OF_MEMORY
             throw(OutOfMemoryError())
         elseif result == FORCED_STOP
             global nlopt_exception
             e = nlopt_exception
-            if e != nothing && !isa(e, ForcedStop)
+            if e !== nothing && !isa(e, ForcedStop)
                 nlopt_exception = nothing
                 rethrow(e)
             end
         else
-            error("nlopt failure: $result")
+            error("nlopt failure $result", _errmsg(o))
         end
     end
-    result
+    return nothing
 end
-
-chks(result::Integer) = res2sym[chk(result)]
-chkn(result::Integer) = begin chk(result); nothing; end
 
 ############################################################################
 # getting and setting scalar and vector parameters
@@ -254,8 +262,8 @@ macro GETSET(T, p)
         $(esc(p))(o::Opt) = ccall(($(qsym("nlopt_get_", p)),libnlopt),
                                   $T, (_Opt,), o)
         $(esc(ps))(o::Opt, val::$Tg) =
-          chkn(ccall(($(qsym("nlopt_set_", p)),libnlopt),
-                     Cint, (_Opt, $T), o, val))
+          chk(o, ccall(($(qsym("nlopt_set_", p)),libnlopt),
+                     Result, (_Opt, $T), o, val))
     end
 end
 
@@ -267,8 +275,8 @@ macro GETSET_VEC(p)
             if length(v) != ndims(o)
                 throw(BoundsError())
             end
-            chk(ccall(($(qsym("nlopt_get_", p)),libnlopt),
-                      Cint, (_Opt, Ptr{Cdouble}), o, v))
+            chk(o, ccall(($(qsym("nlopt_get_", p)),libnlopt),
+                      Result, (_Opt, Ptr{Cdouble}), o, v))
             v
         end
         $(esc(p))(o::Opt) = $(esc(p))(o, Array{Cdouble}(undef, ndims(o)))
@@ -276,14 +284,14 @@ macro GETSET_VEC(p)
             if length(v) != ndims(o)
                 throw(BoundsError())
             end
-            chkn(ccall(($(qsym("nlopt_set_", p)),libnlopt),
-                      Cint, (_Opt, Ptr{Cdouble}), o, v))
+            chk(o, ccall(($(qsym("nlopt_set_", p)),libnlopt),
+                      Result, (_Opt, Ptr{Cdouble}), o, v))
         end
         $(esc(ps))(o::Opt, v::AbstractVector{<:Real}) =
           $(esc(ps))(o, Array{Cdouble}(v))
         $(esc(ps))(o::Opt, val::Real) =
-          chkn(ccall(($(qsym("nlopt_set_", p, "1")),libnlopt),
-                     Cint, (_Opt, Cdouble), o, val))
+          chk(o, ccall(($(qsym("nlopt_set_", p, "1")),libnlopt),
+                     Result, (_Opt, Cdouble), o, val))
     end
 end
 
@@ -306,8 +314,8 @@ end
 force_stop!(o::Opt) = force_stop!(o, 1)
 
 local_optimizer!(o::Opt, lo::Opt) =
-  chkn(ccall((:nlopt_set_local_optimizer,libnlopt),
-             Cint, (_Opt, _Opt), o, lo))
+  chk(o, ccall((:nlopt_set_local_optimizer,libnlopt),
+             Result, (_Opt, _Opt), o, lo))
 
 # the initial-stepsize stuff is a bit different than GETSET_VEC,
 # since the heuristics depend on the position x.
@@ -316,8 +324,8 @@ function default_initial_step!(o::Opt, x::Vector{Cdouble})
     if length(x) != ndims(o)
         throw(BoundsError())
     end
-    chkn(ccall((:nlopt_set_default_initial_step,libnlopt),
-               Cint, (_Opt, Ptr{Cdouble}), o, x))
+    chk(o, ccall((:nlopt_set_default_initial_step,libnlopt),
+               Result, (_Opt, Ptr{Cdouble}), o, x))
 end
 default_initial_step!(o::Opt, x::AbstractVector{<:Real}) =
   default_initial_step!(o, Array{Cdouble}(x))
@@ -326,21 +334,21 @@ function initial_step!(o::Opt, dx::Vector{Cdouble})
     if length(dx) != ndims(o)
         throw(BoundsError())
     end
-    chkn(ccall((:nlopt_set_initial_step,libnlopt),
-               Cint, (_Opt, Ptr{Cdouble}), o, dx))
+    chk(o, ccall((:nlopt_set_initial_step,libnlopt),
+               Result, (_Opt, Ptr{Cdouble}), o, dx))
 end
 initial_step!(o::Opt, dx::AbstractVector{<:Real}) =
   initial_step!(o, Array{Cdouble}(dx))
 initial_step!(o::Opt, dx::Real) =
-  chkn(ccall((:nlopt_set_initial_step1,libnlopt),
-             Cint, (_Opt, Cdouble), o, dx))
+  chk(o, ccall((:nlopt_set_initial_step1,libnlopt),
+             Result, (_Opt, Cdouble), o, dx))
 
 function initial_step(o::Opt, x::Vector{Cdouble}, dx::Vector{Cdouble})
     if length(x) != ndims(o) || length(dx) != ndims(o)
         throw(BoundsError())
     end
-    chkn(ccall((:nlopt_get_initial_step,libnlopt),
-               Cint, (_Opt, Ptr{Cdouble}, Ptr{Cdouble}), o, x, dx))
+    chk(o, ccall((:nlopt_get_initial_step,libnlopt),
+               Result, (_Opt, Ptr{Cdouble}, Ptr{Cdouble}), o, x, dx))
     dx
 end
 initial_step(o::Opt, x::AbstractVector{<:Real}) =
@@ -349,28 +357,37 @@ initial_step(o::Opt, x::AbstractVector{<:Real}) =
 
 ############################################################################
 
-function algorithm_name(a::Integer)
-    s = ccall((:nlopt_algorithm_name,libnlopt), Ptr{UInt8}, (Cint,), a)
+function algorithm_name(a::Algorithm)
+    s = ccall((:nlopt_algorithm_name,libnlopt), Ptr{UInt8}, (Algorithm,), a)
     if s == C_NULL
         throw(ArgumentError("invalid algorithm $a"))
     end
-    return String(s)
+    return unsafe_string(s)
 end
 
-algorithm_name(a::Symbol) = algorithm_name(try alg2int[a]
+algorithm_name(a::Integer) = algorithm_name(Algorithm(a))
+algorithm_name(a::Symbol) = algorithm_name(try sym2alg[a]
                                            catch
                              throw(ArgumentError("unknown algorithm $a"))
                                            end)
 algorithm_name(o::Opt) = algorithm_name(algorithm(o))
 
+function Base.show(io::IO, ::MIME"text/plain", a::Algorithm)
+    show(io, a)
+    print(io, ": ", algorithm_name(a))
+end
+
+numevals(o::Opt) = ccall((:nlopt_get_numevals,libnlopt), Cint, (_Opt,), o)
+
 ############################################################################
 
 function version()
-    v = Array{Cint}(undef,3)
-    pv = pointer(v)
-    ccall((:nlopt_version,libnlopt), Cvoid, (Ptr{Cint},Ptr{Cint},Ptr{Cint}),
-          pv, pv + sizeof(Cint), pv + 2*sizeof(Cint))
-    VersionNumber(convert(Int, v[1]),convert(Int, v[2]),convert(Int, v[3]))
+    major = Ref{Cint}()
+    minor = Ref{Cint}()
+    patch = Ref{Cint}()
+    ccall((:nlopt_version,libnlopt), Cvoid, (Ref{Cint},Ref{Cint},Ref{Cint}),
+          major, minor, patch)
+    return VersionNumber(major[], minor[], patch[])
 end
 
 const NLOPT_VERSION = version()
@@ -398,7 +415,6 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
     catch e
         global nlopt_exception
         nlopt_exception = e
-        println("in callback catch")
         force_stop!(d.o::Opt)
         return 0.0 # ignored by nlopt
     end
@@ -410,8 +426,8 @@ for m in (:min, :max)
         o.cb[1] = Callback_Data(f, o)
         nlopt_callback_wrapper_ptr = @cfunction(nlopt_callback_wrapper,
             Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
-        chkn(ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
-                   Cint, (_Opt, Ptr{Cvoid}, Any),
+        chk(o, ccall(($(qsym("nlopt_set_", m, "_objective")),libnlopt),
+                   Result, (_Opt, Ptr{Cvoid}, Any),
                    o, nlopt_callback_wrapper_ptr,
                    o.cb[1]))
     end
@@ -426,8 +442,8 @@ for c in (:inequality, :equality)
         push!(o.cb, Callback_Data(f, o))
         nlopt_callback_wrapper_ptr = @cfunction(nlopt_callback_wrapper,
             Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
-        chkn(ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
-                   Cint, (_Opt, Ptr{Cvoid}, Any, Cdouble),
+        chk(o, ccall(($(qsym("nlopt_add_", c, "_constraint")),libnlopt),
+                   Result, (_Opt, Ptr{Cvoid}, Any, Cdouble),
                    o, nlopt_callback_wrapper_ptr,
                    o.cb[end], tol))
     end
@@ -436,10 +452,10 @@ end
 
 function remove_constraints!(o::Opt)
     resize!(o.cb, 1)
-    chkn(ccall((:nlopt_remove_inequality_constraints,libnlopt),
-               Cint, (_Opt,), o))
-    chkn(ccall((:nlopt_remove_equality_constraints,libnlopt),
-               Cint, (_Opt,), o))
+    chk(o, ccall((:nlopt_remove_inequality_constraints,libnlopt),
+               Result, (_Opt,), o))
+    chk(o, ccall((:nlopt_remove_equality_constraints,libnlopt),
+               Result, (_Opt,), o))
 end
 
 ############################################################################
@@ -472,9 +488,9 @@ for c in (:inequality, :equality)
             push!(o.cb, Callback_Data(f, o))
             nlopt_vcallback_wrapper_ptr = @cfunction(nlopt_vcallback_wrapper, Cvoid,
                   (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}))
-            chkn(ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
+            chk(o, ccall(($(qsym("nlopt_add_", c, "_mconstraint")),
                         libnlopt),
-                       Cint, (_Opt, Cuint, Ptr{Cvoid}, Any, Ptr{Cdouble}),
+                       Result, (_Opt, Cuint, Ptr{Cvoid}, Any, Ptr{Cdouble}),
                        o, length(tol), nlopt_vcallback_wrapper_ptr,
                        o.cb[end], tol))
         end
@@ -495,10 +511,11 @@ function optimize!(o::Opt, x::Vector{Cdouble})
         throw(BoundsError())
     end
     opt_f = Array{Cdouble}(undef,1)
-    ret = ccall((:nlopt_optimize,libnlopt), Cint, (_Opt, Ptr{Cdouble},
+    ret = ccall((:nlopt_optimize,libnlopt), Result, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
-    return (opt_f[1], x, chks(ret))
+    ret == INVALID_ARGS && chk(o, ret)
+    return (opt_f[1], x, Symbol(ret))
 end
 
 optimize(o::Opt, x::AbstractVector{<:Real}) =
