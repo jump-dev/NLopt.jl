@@ -24,6 +24,6 @@ function compile(libname, tarball_url, hash; prefix=BinaryProvider.global_prefix
         run(`$cmake_executable --build .`)
         mkpath(libdir(prefix))
         cp("libnlopt_cxx.$dlext", joinpath(libdir(prefix), libname*"."*dlext),
-           remove_destination=true, follow_symlinks=true)
+           force=true, follow_symlinks=true)
     end
 end
