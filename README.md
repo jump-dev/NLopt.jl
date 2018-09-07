@@ -86,8 +86,8 @@ inequality_constraint!(opt, (x,g) -> myconstraint(x,g,2,0), 1e-8)
 inequality_constraint!(opt, (x,g) -> myconstraint(x,g,-1,1), 1e-8)
 
 (minf,minx,ret) = optimize(opt, [1.234, 5.678])
-count = opt.numevals # the number of function evaluations
-println("got $minf at $minx after $count iterations (returned $ret)")
+numevals = opt.numevals # the number of function evaluations
+println("got $minf at $minx after $numevals iterations (returned $ret)")
 ```
 
 The output should be:
