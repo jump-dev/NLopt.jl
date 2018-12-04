@@ -458,7 +458,7 @@ initial_step!(opt::Opt, dx::AbstractVector)
 
 Here, dx is an array of the (nonzero) initial steps for each
 dimension, or a single number if you wish to use the same initial
-steps for all dimensions. `get_initial_step(opt::Opt,
+steps for all dimensions. `initial_step(opt::Opt,
 x::AbstractVector)` returns the initial step that will be used for a
 starting guess of `x` in `optimize(opt,x)`.
 
