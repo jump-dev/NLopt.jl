@@ -78,10 +78,10 @@ function myconstraint(x::Vector, grad::Vector, a, b)
 end
 
 opt = Opt(:LD_MMA, 2)
-lower_bounds!(opt, [-Inf, 0.])
-xtol_rel!(opt,1e-4)
+opt.lower_bounds = [-Inf, 0.]
+opt.xtol_rel = 1e-4
 
-min_objective!(opt, myfunc)
+opt.min_objective = myfunc
 inequality_constraint!(opt, (x,g) -> myconstraint(x,g,2,0), 1e-8)
 inequality_constraint!(opt, (x,g) -> myconstraint(x,g,-1,1), 1e-8)
 
@@ -182,10 +182,10 @@ object (equivalent to `nlopt_copy` in the C API).
 
 If there is an error in these functions, an exception is thrown.
 
-The algorithm and dimension parameters of the object are immutable (cannot be changed without constructing a new object), but you can query them for a given object by the functions:
+The algorithm and dimension parameters of the object are immutable (cannot be changed without constructing a new object), but you can query them for a given object by the properties:
 ```julia
-ndims(opt::Opt)
-algorithm(opt::Opt)
+opt.ndims
+opt.algorithm
 ```
 
 You can get a string description of the algorithm via:
@@ -195,10 +195,10 @@ algorithm_name(opt::Opt)
 
 ### Objective function
 
-The objective function is specified by calling one of the functions:
+The objective function is specified by setting one of the properties:
 ```julia
-min_objective!(opt::Opt, f::Function)
-max_objective!(opt::Opt, f::Function)
+opt.min_objective = f
+opt.max_objective = f
 ```
 
 depending on whether one wishes to minimize or maximize the objective function `f`, respectively. The function `f` should be of the form:
@@ -229,27 +229,27 @@ Note that `grad` must be modified *in-place* by your function `f`. Generally, th
 
 ### Bound constraints
 
-The bound constraints can be specified by calling the functions:
+The bound constraints can be specified by setting one of the properties:
 ```julia
-lower_bounds!(opt::Opt, lb::AbstractVector)
-upper_bounds!(opt::Opt, ub::AbstractVector)
+opt.lower_bounds = lb::Union{AbstractVector,Real}
+opt.upper_bounds = ub::Union{AbstractVector,Real}
 ```
 
 where `lb` and `ub` are real arrays of length `n` (the same as the
-dimension passed to the `Opt` constructor). For convenience, these are
-overloaded with functions that take a single number as arguments, in
+dimension passed to the `Opt` constructor). For convenience, you can
+instead use a single scalar for `lb` or `ub` in
 order to set the lower/upper bounds for all optimization parameters to
 a single constant.
 
-To retrieve the values of the lower/upper bounds, you can call one of:
+To retrieve the values of the lower/upper bounds, you can use the properties
 ```julia
-lower_bounds(opt::Opt)
-upper_bounds(opt::Opt)
+opt.lower_bounds
+opt.upper_bounds
 ```
 
 both of which return `Vector{Float64}` arrays.
 
-To specify an unbounded dimension, you can use &plusmn;`Inf`.
+To specify an unbounded dimension, you can use `±Inf`.
 
 ### Nonlinear constraints
 
@@ -263,8 +263,11 @@ equality_constraint!(opt::Opt, h, tol=0)
 where the arguments `fc` and `h` have the same form as the objective
 function above. The optional `tol` arguments specify a tolerance
 (which defaults to zero) in judging feasibility for the purposes of
-stopping the optimization, as in C.
+stopping the optimization, as in C.   For the default `tol=0`, you can
+also use `opt.inequality_constraint = fc` or `opt.equality_constraint = hc`.
 
+Each call to these function *adds* a new constraint to the set of constraints,
+rather than replacing the constraints.
 To remove all of the inequality and equality constraints from a given problem, you can call the following functions:
 ```julia
 remove_constraints!(opt::Opt)
@@ -328,55 +331,44 @@ you have multiple options for different stopping criteria that you can
 specify. (Unspecified stopping criteria are disabled; i.e., they have
 innocuous defaults.)
 
-For each stopping criteria, there are (at least) two functions: a
-"set" function (ending with `!`) to specify the stopping criterion,
-and a "get" function to retrieve the current value for that
-criterion. The meanings of each criterion are exactly the same as in
-the C API.
-```julia
-stopval!(o::Opt, stopval::Real)
-stopval(o::Opt)
-```
+For each stopping criteria, there is a property of the `opt::Opt` object
+that you can use to get/set the value of the stopping criterion.
+The meanings of each criterion are exactly the same as in the C API:
 
+```julia
+opt.stopval
+```
 Stop when an objective value of at least `stopval` is found.
-```julia
-ftol_rel!(o::Opt, tol::Real)
-ftol_rel(o::Opt)
-```
+(Defaults to `-Inf`.)
 
-Set relative tolerance on function value.
 ```julia
-ftol_abs!(o::Opt, tol::Real)
-ftol_abs(o::Opt)
+opt.ftol_rel
+opt.ftol_abs
 ```
+Relative or absolute tolerance on function value. (Defaults to `0`.)
 
-Set absolute tolerance on function value.
 ```julia
-xtol_rel!(o::Opt, tol::Real)
-xtol_rel(o::Opt)
+opt.xtol_rel
+opt.xtol_abs
 ```
+Absolute or relative tolerances on the optimization parameters.
+(Both default to `0`.)
+In the case of `xtol_abs`, you can either set it to a scalar
+(to use the same tolerance for all inputs) or a vector of
+length `n` (the dimension specified in the `Opt` constructor)
+to use a different tolerance for each parameter.
 
-Set relative tolerance on optimization parameters.
 ```julia
-xtol_abs!(o::Opt, tol)
-xtol_abs(o::Opt)
+opt.maxeval
 ```
-
-Set absolute tolerances on optimization parameters. The `tol` input must be an array of length `n` (the dimension specified in the `Opt` constructor); alternatively, you can pass a single number in order to set the same tolerance for all optimization parameters. `xtol_abs(o)` returns the tolerances as a array.
-```julia
-maxeval!(o::Opt, mev::Integer)
-maxeval(o::Opt)
-```
-
 Stop when the number of function evaluations exceeds `mev`. (0 or
-negative for no limit.)
-```julia
-maxtime!(o::Opt, t::Real)
-maxtime(o::Opt)
-```
+negative for no limit, which is the default.)
 
+```julia
+opt.maxtime
+```
 Stop when the optimization time (in seconds) exceeds `t`. (0 or
-negative for no limit.)
+negative for no limit, which is the default.)
 
 ### Forced termination
 
@@ -436,27 +428,25 @@ the same exception to its caller.
 Some of the algorithms, especially MLSL and AUGLAG, use a different
 optimization algorithm as a subroutine, typically for local
 optimization. You can change the local search algorithm and its
-tolerances by calling:
+tolerances by setting:
 ```julia
-local_optimizer!(opt::Opt, local_opt::Opt)
+opt.local_optimizer = local_opt::Opt
 ```
 
 Here, `local_opt` is another `Opt` object whose parameters are used to determine the local search algorithm, its stopping criteria, and other algorithm parameters. (However, the objective function, bounds, and nonlinear-constraint parameters of `local_opt` are ignored.) The dimension `n` of `local_opt` must match that of `opt`.
 
-This function makes a copy of the `local_opt` object, so you can freely change your original `local_opt` afterwards without affecting `opt`.
+This makes a copy of the `local_opt` object, so you can freely change your original `local_opt` afterwards without affecting `opt`.
 
 ### Initial step size
 
 Just [as in the C
 API](http://ab-initio.mit.edu/wiki/index.php/NLopt_Reference#Initial_step_size),
-you can get and set the initial step sizes for derivative-free
-optimization algorithms. The Julia equivalents of the C functions are
-the following functions:
+you can set the initial step sizes for derivative-free
+optimization algorithms via the `opt.initial_step` property:
 ```julia
-initial_step!(opt::Opt, dx::AbstractVector)
+opt.initial_step = dx
 ```
-
-Here, dx is an array of the (nonzero) initial steps for each
+Here, `dx` is an array of the (nonzero) initial steps for each
 dimension, or a single number if you wish to use the same initial
 steps for all dimensions. `get_initial_step(opt::Opt,
 x::AbstractVector)` returns the initial step that will be used for a
@@ -467,13 +457,11 @@ starting guess of `x` in `optimize(opt,x)`.
 Just [as in the C
 API](http://ab-initio.mit.edu/wiki/index.php/NLopt_Reference#Stochastic_population),
 you can get and set the initial population for stochastic optimization
-algorithms, by the functions:
+algorithms by the property
 ```julia
-population!(opt::Opt, pop::Integer)
-population(opt::Opt)
+opt.population
 ```
-
-(A `pop` of zero implies that the heuristic default will be used.)
+(A `population` of zero, the default, implies that the heuristic default will be used as decided upon by individual algorithms.)
 
 ### Pseudorandom numbers
 
@@ -487,7 +475,6 @@ sequence from run to run, you can set the seed by calling:
 ```julia
 NLopt.srand(seed::Integer)
 ```
-
 To reset the seed based on the system time, you can call `NLopt.srand_time()`.
 
 (Normally, you don't need to call this as it is called
@@ -497,13 +484,12 @@ set a deterministic seed.)
 
 ### Vector storage for limited-memory quasi-Newton algorithms
 
-Just [as in the C API](http://ab-initio.mit.edu/wiki/index.php/NLopt_Reference#Vector_storage_for_limited-memory_quasi-Newton_algorithms), you can get and set the number M of stored vectors for limited-memory quasi-Newton algorithms, via the functions:
+Just [as in the C API](http://ab-initio.mit.edu/wiki/index.php/NLopt_Reference#Vector_storage_for_limited-memory_quasi-Newton_algorithms), you can get and set the number M of stored vectors for limited-memory quasi-Newton algorithms, via integer-valued property
 ```julia
-vector_storage!(opt::Opt, M::Integer)
-vector_storage(opt::Opt)
+opt.vector_storage
 ```
-
-(The default is `M`=0, in which case NLopt uses a heuristic nonzero value.)
+(The default is `0`, in which case NLopt uses a heuristic nonzero value as
+determined by individual algorithms.)
 
 ### Version number
 
