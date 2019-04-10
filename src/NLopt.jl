@@ -536,6 +536,8 @@ function Base.getproperty(o::Opt, p::Symbol)
         return initial_step(o)
     elseif p === :algorithm
         return algorithm(o)
+    elseif p === :ndims
+        return ndims(o)
     elseif p === :numevals
         return numevals(o)
     elseif p === :errmsg
@@ -591,7 +593,7 @@ function Base.setproperty!(o::Opt, p::Symbol, x)
 end
 
 Base.propertynames(o::Opt) =
-   (:lower_bounds, :upper_bounds, :stopval, :ftol_rel, :ftol_abs, :xtol_rel, :xtol_abs, :maxeval, :maxtime, :force_stop, :population, :vector_storage, :initial_step, :algorithm, :local_optimizer, :default_initial_step, :initial_step, :min_objective, :max_objective, :inequality_constraint, :equality_constraint, :numevals, :errmsg)
+   (:lower_bounds, :upper_bounds, :stopval, :ftol_rel, :ftol_abs, :xtol_rel, :xtol_abs, :maxeval, :maxtime, :force_stop, :population, :vector_storage, :initial_step, :algorithm, :ndims, :local_optimizer, :default_initial_step, :initial_step, :min_objective, :max_objective, :inequality_constraint, :equality_constraint, :numevals, :errmsg)
 
 ############################################################################
 # Perform the optimization:
