@@ -182,9 +182,9 @@ object (equivalent to `nlopt_copy` in the C API).
 
 If there is an error in these functions, an exception is thrown.
 
-The algorithm and dimension parameters of the object are immutable (cannot be changed without constructing a new object), but you can query them for a given object by the properties:
+The algorithm and dimension parameters of the object are immutable (cannot be changed without constructing a new object), but you can query them for a given object by:
 ```julia
-opt.ndims
+ndims(opt)
 opt.algorithm
 ```
 
