@@ -103,7 +103,7 @@ Base.:(==)(r::Result, s::Symbol) = s == r
 const _Opt = Ptr{Cvoid} # nlopt_opt
 
 # pass both f and o to the callback so that we can handle exceptions
-struct Callback_Data
+mutable struct Callback_Data
     f::Function
     o::Any # should be Opt, but see Julia issue #269
 end
