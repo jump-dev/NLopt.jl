@@ -1,5 +1,3 @@
-VERSION < v"0.7.0-beta2.199" && __precompile__()
-
 module NLopt
 
 export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
@@ -10,18 +8,7 @@ export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
 import MathProgBase.SolverInterface
 import MathProgBase.SolverInterface.optimize!
 
-import Libdl
-const depsjl_path = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
-if !isfile(depsjl_path)
-    error("NLopt not installed properly; run Pkg.build(\"NLopt\"), restart Julia, and try again.")
-end
-include(depsjl_path)
-
-function __init__()
-    check_deps()
-    v = version()
-    v >= v"2.5" || error("NLopt $v < 2.5 is too old")
-end
+using NLopt_jll
 
 ############################################################################
 # Mirrors of NLopt's C enum constants:
@@ -176,38 +163,25 @@ function Base.copy(o::Opt)
         end
     end
 
-    try
-        # n.o, for each callback, stores a pointer to an element of o.cb,
-        # and we need to convert this into a pointer to the corresponding
-        # element of n.cb.  nlopt_munge_data allows us to call a function
-        # to transform each stored pointer in n.o, and we use the cbi
-        # dictionary to convert pointers to indices into o.cb, whence
-        # we obtain the corresponding element of n.cb.
-        cbi = Dict{Ptr{Cvoid},Int}()
-        for i in 1:length(cb)
-            try
-                cbi[pointer_from_objref(cb[i])] = i
-            catch
-            end
-        end
-        munge_callback_ptr = @cfunction(munge_callback, Ptr{Cvoid},
-                                        (Ptr{Cvoid}, Ptr{Cvoid}))
-        ccall((:nlopt_munge_data,libnlopt), Cvoid, (_Opt, Ptr{Cvoid}, Any),
-              n, munge_callback_ptr,
-              p::Ptr{Cvoid} -> p==C_NULL ? C_NULL :
-                              pointer_from_objref(n.cb[cbi[p]]))
-    catch e0
-        # nlopt_munge_data not available, punt unless there is
-        # no callback data
+    # n.o, for each callback, stores a pointer to an element of o.cb,
+    # and we need to convert this into a pointer to the corresponding
+    # element of n.cb.  nlopt_munge_data allows us to call a function
+    # to transform each stored pointer in n.o, and we use the cbi
+    # dictionary to convert pointers to indices into o.cb, whence
+    # we obtain the corresponding element of n.cb.
+    cbi = Dict{Ptr{Cvoid},Int}()
+    for i in 1:length(cb)
         try
-            cb[1]
-        catch e
-            if length(cb) == 1 && isa(e, UndefRefError)
-                return n
-            end
+            cbi[pointer_from_objref(cb[i])] = i
+        catch
         end
-        error("copy(o::Opt) not supported for NLopt version < 2.4")
     end
+    munge_callback_ptr = @cfunction(munge_callback, Ptr{Cvoid},
+                                    (Ptr{Cvoid}, Ptr{Cvoid}))
+    ccall((:nlopt_munge_data,libnlopt), Cvoid, (_Opt, Ptr{Cvoid}, Any),
+            n, munge_callback_ptr,
+            p::Ptr{Cvoid} -> p==C_NULL ? C_NULL :
+                            pointer_from_objref(n.cb[cbi[p]]))
 
     return n
 end
