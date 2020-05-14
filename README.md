@@ -2,10 +2,6 @@
 [![Build Status](https://travis-ci.org/JuliaOpt/NLopt.jl.svg?branch=master)](https://travis-ci.org/JuliaOpt/NLopt.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/eqw9yb2cyn8sxvo9?svg=true)](https://ci.appveyor.com/project/StevenGJohnson/nlopt-jl)
 
-[![NLopt](http://pkg.julialang.org/badges/NLopt_0.3.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.3)
-[![NLopt](http://pkg.julialang.org/badges/NLopt_0.4.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.4)
-[![NLopt](http://pkg.julialang.org/badges/NLopt_0.5.svg)](http://pkg.julialang.org/?pkg=NLopt&ver=0.5)
-
 This module provides a [Julia-language](http://julialang.org/) interface to
 the free/open-source [NLopt library](http://ab-initio.mit.edu/nlopt) for
 nonlinear optimization. NLopt provides a common interface for many different
