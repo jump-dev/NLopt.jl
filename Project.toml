@@ -7,10 +7,6 @@ MathProgBase = "fdba3010-5040-5b88-9595-932c9decdf73"
 NLopt_jll = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
 
 [compat]
-<<<<<<< HEAD
-BinaryProvider = ">= 0.3.0"
-=======
->>>>>>> 226455204246ce57afaeaa36be0902253e0ce4f9
 MathProgBase = "0.5, 0.6, 0.7, 0.8"
 julia = "1.3"
 
