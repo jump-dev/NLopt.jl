@@ -5,23 +5,18 @@ const MOIU = MathOptInterface.Utilities
 mutable struct VariableInfo
     lower_bound::Float64  # May be -Inf even if has_lower_bound == true
     has_lower_bound::Bool # Implies lower_bound == Inf
-    lower_bound_dual_start::Union{Nothing, Float64}
     upper_bound::Float64  # May be Inf even if has_upper_bound == true
     has_upper_bound::Bool # Implies upper_bound == Inf
-    upper_bound_dual_start::Union{Nothing, Float64}
     is_fixed::Bool        # Implies lower_bound == upper_bound and !has_lower_bound and !has_upper_bound.
     start::Union{Nothing, Float64}
 end
 
-VariableInfo() = VariableInfo(-Inf, false, nothing, Inf, false, nothing, false, nothing)
+VariableInfo() = VariableInfo(-Inf, false, Inf, false, false, nothing)
 
 mutable struct ConstraintInfo{F, S}
     func::F
     set::S
-    dual_start::Union{Nothing, Float64}
 end
-
-ConstraintInfo(func, set) = ConstraintInfo(func, set, nothing)
 
 mutable struct Optimizer <: MOI.AbstractOptimizer
     inner::Union{Opt,Nothing}
@@ -35,7 +30,6 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     linear_eq_constraints::Vector{ConstraintInfo{MOI.ScalarAffineFunction{Float64}, MOI.EqualTo{Float64}}}
     quadratic_le_constraints::Vector{ConstraintInfo{MOI.ScalarQuadraticFunction{Float64}, MOI.LessThan{Float64}}}
     quadratic_eq_constraints::Vector{ConstraintInfo{MOI.ScalarQuadraticFunction{Float64}, MOI.EqualTo{Float64}}}
-    nlp_dual_start::Union{Nothing, Vector{Float64}}
 
     # Parameters.
     silent::Bool
@@ -92,7 +86,7 @@ const DEFAULT_OPTIONS = Dict{String, Any}(
 
 function Optimizer()
     return Optimizer(nothing, VariableInfo[], empty_nlp_data(), MOI.FEASIBILITY_SENSE,
-                     nothing, [], [], [], [], nothing,
+                     nothing, [], [], [], [],
                      false, copy(DEFAULT_OPTIONS), NaN, Float64[], :NOT_CALLED, NaN)
 end
 
@@ -362,7 +356,6 @@ function MOI.empty!(model::Optimizer)
     empty!(model.linear_eq_constraints)
     empty!(model.quadratic_le_constraints)
     empty!(model.quadratic_eq_constraints)
-    model.nlp_dual_start = nothing
 end
 
 function MOI.is_empty(model::Optimizer)
@@ -555,63 +548,6 @@ function MOI.set(model::Optimizer, ::MOI.VariablePrimalStart,
     MOI.throw_if_not_valid(model, vi)
     model.variable_info[vi.value].start = value
     return
-end
-
-function MOI.supports(model::Optimizer, ::MOI.ConstraintDualStart,
-                      ci::MOI.ConstraintIndex{MOI.SingleVariable, MOI.GreaterThan{Float64}},
-                      value::Union{Real, Nothing})
-    return true
-end
-function MOI.set(model::Optimizer, ::MOI.ConstraintDualStart,
-                 ci::MOI.ConstraintIndex{MOI.SingleVariable, MOI.GreaterThan{Float64}},
-                 value::Union{Real, Nothing})
-    MOI.throw_if_not_valid(model, ci)
-    model.variable_info[ci.value].lower_bound_dual_start = value
-    return
-end
-function MOI.supports(model::Optimizer, ::MOI.ConstraintDualStart,
-                      ci::MOI.ConstraintIndex{MOI.SingleVariable, MOI.LessThan{Float64}},
-                      value::Union{Real, Nothing})
-    return true
-end
-function MOI.set(model::Optimizer, ::MOI.ConstraintDualStart,
-                 ci::MOI.ConstraintIndex{MOI.SingleVariable, MOI.LessThan{Float64}},
-                 value::Union{Real, Nothing})
-    MOI.throw_if_not_valid(model, ci)
-    model.variable_info[ci.value].upper_bound_dual_start = value
-    return
-end
-function MOI.supports(model::Optimizer, ::MOI.ConstraintDualStart,
-                      ci::MOI.ConstraintIndex{MOI.SingleVariable, MOI.EqualTo{Float64}},
-                      value::Union{Real, Nothing})
-    return true
-end
-function MOI.set(model::Optimizer, ::MOI.ConstraintDualStart,
-                 ci::MOI.ConstraintIndex{MOI.SingleVariable, MOI.EqualTo{Float64}},
-                 value::Union{Real, Nothing})
-    MOI.throw_if_not_valid(model, ci)
-    model.variable_info[ci.value].upper_bound_dual_start = value
-    model.variable_info[ci.value].lower_bound_dual_start = value
-    return
-end
-
-macro define_constraint_dual_start(function_type, set_type, prefix)
-    array_name = Symbol(string(prefix) * "_constraints")
-    quote
-        function MOI.supports(::Optimizer, ::MOI.ConstraintDualStart,
-                              ::MOI.ConstraintIndex{$function_type, $set_type})
-            return true
-        end
-        function MOI.set(model::Optimizer, ::MOI.ConstraintDualStart,
-                         ci::MOI.ConstraintIndex{$function_type, $set_type})
-            if !(1 <= ci.value <= length(model.$(array_name)))
-                throw(MOI.InvalidIndex(ci))
-            end
-            # Rescaling by `-1`, see `@define_constraint_dual`.
-            model.$array_name[ci.value].dual_start = -value
-            return
-        end
-    end
 end
 
 function MOI.set(model::Optimizer, ::MOI.NLPBlock, nlp_data::MOI.NLPBlockData)
