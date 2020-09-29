@@ -1,8 +1,9 @@
 name = "NLopt"
 uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
-version = "0.6"
+version = "0.6.0"
 
 [deps]
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 MathProgBase = "fdba3010-5040-5b88-9595-932c9decdf73"
 NLopt_jll = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
 

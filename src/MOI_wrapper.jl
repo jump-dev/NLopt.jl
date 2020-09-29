@@ -24,7 +24,7 @@ end
 ConstraintInfo(func, set) = ConstraintInfo(func, set, nothing)
 
 mutable struct Optimizer <: MOI.AbstractOptimizer
-    inner::Union{IpoptProblem,Nothing}
+    inner::Union{Opt,Nothing}
 
     # Problem data.
     variable_info::Vector{VariableInfo}
@@ -72,7 +72,7 @@ end
 empty_nlp_data() = MOI.NLPBlockData([], EmptyNLPEvaluator(), false)
 
 const DEFAULT_OPTIONS = Dict{String, Any}(
-    "algorithm" => :none
+    "algorithm" => :none,
     "stopval" => NaN,
     "ftol_rel" => 1e-7,
     "ftol_abs" => NaN,
@@ -88,8 +88,8 @@ const DEFAULT_OPTIONS = Dict{String, Any}(
 )
 
 function Optimizer()
-    return Optimizer(nothing, [], empty_nlp_data(), MOI.FEASIBILITY_SENSE,
-                     nothing, [], [], [], [], [], [], nothing,
+    return Optimizer(nothing, VariableInfo[], empty_nlp_data(), MOI.FEASIBILITY_SENSE,
+                     nothing, [], [], [], [], nothing,
                      false, copy(DEFAULT_OPTIONS), NaN)
 end
 
@@ -356,10 +356,8 @@ function MOI.empty!(model::Optimizer)
     model.sense = MOI.FEASIBILITY_SENSE
     model.objective = nothing
     empty!(model.linear_le_constraints)
-    empty!(model.linear_ge_constraints)
     empty!(model.linear_eq_constraints)
     empty!(model.quadratic_le_constraints)
-    empty!(model.quadratic_ge_constraints)
     empty!(model.quadratic_eq_constraints)
     model.nlp_dual_start = nothing
 end
@@ -369,10 +367,8 @@ function MOI.is_empty(model::Optimizer)
            model.nlp_data.evaluator isa EmptyNLPEvaluator &&
            model.sense == MOI.FEASIBILITY_SENSE &&
            isempty(model.linear_le_constraints) &&
-           isempty(model.linear_ge_constraints) &&
            isempty(model.linear_eq_constraints) &&
            isempty(model.quadratic_le_constraints) &&
-           isempty(model.quadratic_ge_constraints) &&
            isempty(model.quadratic_eq_constraints)
 end
 
@@ -647,19 +643,15 @@ end
 
 # In setting up the data for Ipopt, we order the constraints as follows:
 # - linear_le_constraints
-# - linear_ge_constraints
 # - linear_eq_constraints
 # - quadratic_le_constraints
-# - quadratic_ge_constraints
 # - quadratic_eq_constraints
 # - nonlinear constraints from nlp_data
 
 linear_le_offset(model::Optimizer) = 0
-linear_ge_offset(model::Optimizer) = length(model.linear_le_constraints)
-linear_eq_offset(model::Optimizer) = linear_ge_offset(model) + length(model.linear_ge_constraints)
+linear_eq_offset(model::Optimizer) = length(model.linear_le_constraints)
 quadratic_le_offset(model::Optimizer) = linear_eq_offset(model) + length(model.linear_eq_constraints)
-quadratic_ge_offset(model::Optimizer) = quadratic_le_offset(model) + length(model.quadratic_le_constraints)
-quadratic_eq_offset(model::Optimizer) = quadratic_ge_offset(model) + length(model.quadratic_ge_constraints)
+quadratic_eq_offset(model::Optimizer) = quadratic_le_offset(model) + length(model.quadratic_le_constraints)
 nlp_constraint_offset(model::Optimizer) = quadratic_eq_offset(model) + length(model.quadratic_eq_constraints)
 
 # Convenience functions used only in optimize!
@@ -708,10 +700,8 @@ function jacobian_structure(model::Optimizer)
     jacobian_sparsity = Tuple{Int64,Int64}[]
     row = 1
     @append_to_jacobian_sparsity model.linear_le_constraints
-    @append_to_jacobian_sparsity model.linear_ge_constraints
     @append_to_jacobian_sparsity model.linear_eq_constraints
     @append_to_jacobian_sparsity model.quadratic_le_constraints
-    @append_to_jacobian_sparsity model.quadratic_ge_constraints
     @append_to_jacobian_sparsity model.quadratic_eq_constraints
     for (nlp_row, column) in nlp_jacobian_sparsity
         push!(jacobian_sparsity, (nlp_row + row - 1, column))
@@ -734,9 +724,6 @@ function hessian_lagrangian_structure(model::Optimizer)
         append_to_hessian_sparsity!(hessian_sparsity, model.objective)
     end
     for info in model.quadratic_le_constraints
-        append_to_hessian_sparsity!(hessian_sparsity, info.func)
-    end
-    for info in model.quadratic_ge_constraints
         append_to_hessian_sparsity!(hessian_sparsity, info.func)
     end
     for info in model.quadratic_eq_constraints
@@ -848,10 +835,8 @@ end
 function eval_constraint(model::Optimizer, g, x)
     row = 1
     @eval_function model.linear_le_constraints
-    @eval_function model.linear_ge_constraints
     @eval_function model.linear_eq_constraints
     @eval_function model.quadratic_le_constraints
-    @eval_function model.quadratic_ge_constraints
     @eval_function model.quadratic_eq_constraints
     nlp_g = view(g, row:length(g))
     MOI.eval_constraint(model.nlp_data.evaluator, nlp_g, x)
@@ -904,10 +889,8 @@ end
 function eval_constraint_jacobian(model::Optimizer, values, x)
     offset = 0
     @fill_constraint_jacobian model.linear_le_constraints
-    @fill_constraint_jacobian model.linear_ge_constraints
     @fill_constraint_jacobian model.linear_eq_constraints
     @fill_constraint_jacobian model.quadratic_le_constraints
-    @fill_constraint_jacobian model.quadratic_ge_constraints
     @fill_constraint_jacobian model.quadratic_eq_constraints
 
     nlp_values = view(values, 1+offset:length(values))
@@ -938,9 +921,6 @@ function eval_hessian_lagrangian(model::Optimizer, values, x, obj_factor, lambda
     for (i, info) in enumerate(model.quadratic_le_constraints)
         offset += fill_hessian_lagrangian!(values, offset, lambda[i+quadratic_le_offset(model)], info.func)
     end
-    for (i, info) in enumerate(model.quadratic_ge_constraints)
-        offset += fill_hessian_lagrangian!(values, offset, lambda[i+quadratic_ge_offset(model)], info.func)
-    end
     for (i, info) in enumerate(model.quadratic_eq_constraints)
         offset += fill_hessian_lagrangian!(values, offset, lambda[i+quadratic_eq_offset(model)], info.func)
     end
@@ -956,10 +936,6 @@ function constraint_bounds(model::Optimizer)
         push!(constraint_lb, -Inf)
         push!(constraint_ub, info.set.upper)
     end
-    for info in model.linear_ge_constraints
-        push!(constraint_lb, info.set.lower)
-        push!(constraint_ub, Inf)
-    end
     for info in model.linear_eq_constraints
         push!(constraint_lb, info.set.value)
         push!(constraint_ub, info.set.value)
@@ -967,10 +943,6 @@ function constraint_bounds(model::Optimizer)
     for info in model.quadratic_le_constraints
         push!(constraint_lb, -Inf)
         push!(constraint_ub, info.set.upper)
-    end
-    for info in model.quadratic_ge_constraints
-        push!(constraint_lb, info.set.lower)
-        push!(constraint_ub, Inf)
     end
     for info in model.quadratic_eq_constraints
         push!(constraint_lb, info.set.value)
@@ -1066,7 +1038,6 @@ function MOI.optimize!(model::Optimizer)
     # TODO: Reuse model.inner for incremental solves if possible.
     num_variables = length(model.variable_info)
     num_linear_le_constraints = length(model.linear_le_constraints)
-    num_linear_ge_constraints = length(model.linear_ge_constraints)
     num_linear_eq_constraints = length(model.linear_eq_constraints)
     nlp_row_offset = nlp_constraint_offset(model)
     num_quadratic_constraints = nlp_constraint_offset(model) -
@@ -1199,10 +1170,8 @@ function MOI.optimize!(model::Optimizer)
 
     mult_g_start = [
         [info.dual_start for info in model.linear_le_constraints];
-        [info.dual_start for info in model.linear_ge_constraints];
         [info.dual_start for info in model.linear_eq_constraints];
         [info.dual_start for info in model.quadratic_le_constraints];
-        [info.dual_start for info in model.quadratic_ge_constraints];
         [info.dual_start for info in model.quadratic_eq_constraints];
         model.nlp_dual_start
     ]

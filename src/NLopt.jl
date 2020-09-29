@@ -588,6 +588,6 @@ optimize(o::Opt, x::AbstractVector{<:Real}) =
 ############################################################################
 
 include("MPB_wrapper.jl")
-
+include("MOI_wrapper.jl")
 
 end # module
