@@ -57,7 +57,6 @@ end
 MOI.jacobian_structure(::EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
 MOI.hessian_lagrangian_structure(::EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
 function MOI.eval_constraint_jacobian(::EmptyNLPEvaluator, J, x)
-    @assert length(J) == 0
     return
 end
 function MOI.eval_hessian_lagrangian(::EmptyNLPEvaluator, H, x, σ, μ)
@@ -594,132 +593,6 @@ function MOI.set(model::Optimizer, ::MOI.ObjectiveFunction,
     return
 end
 
-# In setting up the data for Ipopt, we order the constraints as follows:
-# - linear_le_constraints
-# - linear_eq_constraints
-# - quadratic_le_constraints
-# - quadratic_eq_constraints
-# - nonlinear constraints from nlp_data
-
-linear_le_offset(model::Optimizer) = 0
-linear_eq_offset(model::Optimizer) = length(model.linear_le_constraints)
-quadratic_le_offset(model::Optimizer) = linear_eq_offset(model) + length(model.linear_eq_constraints)
-quadratic_eq_offset(model::Optimizer) = quadratic_le_offset(model) + length(model.quadratic_le_constraints)
-nlp_constraint_offset(model::Optimizer) = quadratic_eq_offset(model) + length(model.quadratic_eq_constraints)
-
-# Convenience functions used only in optimize!
-
-function append_to_jacobian_sparsity!(jacobian_sparsity, aff::MOI.ScalarAffineFunction, row)
-    for term in aff.terms
-        push!(jacobian_sparsity, (row, term.variable_index.value))
-    end
-end
-
-function append_to_jacobian_sparsity!(jacobian_sparsity, quad::MOI.ScalarQuadraticFunction, row)
-    for term in quad.affine_terms
-        push!(jacobian_sparsity, (row, term.variable_index.value))
-    end
-    for term in quad.quadratic_terms
-        row_idx = term.variable_index_1
-        col_idx = term.variable_index_2
-        if row_idx == col_idx
-            push!(jacobian_sparsity, (row, row_idx.value))
-        else
-            push!(jacobian_sparsity, (row, row_idx.value))
-            push!(jacobian_sparsity, (row, col_idx.value))
-        end
-    end
-end
-
-# Refers to local variables in jacobian_structure() below.
-macro append_to_jacobian_sparsity(array_name)
-    escrow = esc(:row)
-    quote
-        for info in $(esc(array_name))
-            append_to_jacobian_sparsity!($(esc(:jacobian_sparsity)), info.func, $escrow)
-            $escrow += 1
-        end
-    end
-end
-
-function jacobian_structure(model::Optimizer)
-    num_nlp_constraints = length(model.nlp_data.constraint_bounds)
-    if num_nlp_constraints > 0
-        nlp_jacobian_sparsity = MOI.jacobian_structure(model.nlp_data.evaluator)
-    else
-        nlp_jacobian_sparsity = []
-    end
-
-    jacobian_sparsity = Tuple{Int64,Int64}[]
-    row = 1
-    @append_to_jacobian_sparsity model.linear_le_constraints
-    @append_to_jacobian_sparsity model.linear_eq_constraints
-    @append_to_jacobian_sparsity model.quadratic_le_constraints
-    @append_to_jacobian_sparsity model.quadratic_eq_constraints
-    for (nlp_row, column) in nlp_jacobian_sparsity
-        push!(jacobian_sparsity, (nlp_row + row - 1, column))
-    end
-    return jacobian_sparsity
-end
-
-append_to_hessian_sparsity!(hessian_sparsity, ::Union{MOI.SingleVariable,MOI.ScalarAffineFunction}) = nothing
-
-function append_to_hessian_sparsity!(hessian_sparsity, quad::MOI.ScalarQuadraticFunction)
-    for term in quad.quadratic_terms
-        push!(hessian_sparsity, (term.variable_index_1.value,
-                                 term.variable_index_2.value))
-    end
-end
-
-function hessian_lagrangian_structure(model::Optimizer)
-    hessian_sparsity = Tuple{Int64,Int64}[]
-    if !model.nlp_data.has_objective && model.objective !== nothing
-        append_to_hessian_sparsity!(hessian_sparsity, model.objective)
-    end
-    for info in model.quadratic_le_constraints
-        append_to_hessian_sparsity!(hessian_sparsity, info.func)
-    end
-    for info in model.quadratic_eq_constraints
-        append_to_hessian_sparsity!(hessian_sparsity, info.func)
-    end
-    nlp_hessian_sparsity = MOI.hessian_lagrangian_structure(model.nlp_data.evaluator)
-    append!(hessian_sparsity, nlp_hessian_sparsity)
-    return hessian_sparsity
-end
-
-function eval_function(var::MOI.SingleVariable, x)
-    return x[var.variable.value]
-end
-
-function eval_function(aff::MOI.ScalarAffineFunction, x)
-    function_value = aff.constant
-    for term in aff.terms
-        # Note the implicit assumtion that VariableIndex values match up with
-        # x indices. This is valid because in this wrapper ListOfVariableIndices
-        # is always [1, ..., NumberOfVariables].
-        function_value += term.coefficient*x[term.variable_index.value]
-    end
-    return function_value
-end
-
-function eval_function(quad::MOI.ScalarQuadraticFunction, x)
-    function_value = quad.constant
-    for term in quad.affine_terms
-        function_value += term.coefficient*x[term.variable_index.value]
-    end
-    for term in quad.quadratic_terms
-        row_idx = term.variable_index_1
-        col_idx = term.variable_index_2
-        coefficient = term.coefficient
-        if row_idx == col_idx
-            function_value += 0.5*coefficient*x[row_idx.value]*x[col_idx.value]
-        else
-            function_value += coefficient*x[row_idx.value]*x[col_idx.value]
-        end
-    end
-    return function_value
-end
-
 function eval_objective(model::Optimizer, x)
     # The order of the conditions is important. NLP objectives override regular
     # objectives.
@@ -1088,7 +961,7 @@ function MOI.optimize!(model::Optimizer)
                 end
             elseif v.has_lower_bound
                 model.solution[i] = max(0.0, v.lower_bound)
-            elsemodel.solution
+            else
                 model.solution[i] = min(0.0, v.upper_bound)
             end
         end

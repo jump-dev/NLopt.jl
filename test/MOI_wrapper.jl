@@ -7,9 +7,9 @@ const MOIU = MOI.Utilities
 const MOIB = MOI.Bridges
 
 using NLopt
-const optimizer = NLopt.Optimizer()
+const solver = MOI.OptimizerWithAttributes(NLopt.Optimizer, "algorithm" => :LD_SLSQP)
 
-MOI.set(optimizer, MOI.RawParameter("algorithm"), :LD_SLSQP)
+optimizer = MOI.instantiate(solver)
 
 const config = MOIT.TestConfig(atol=1e-2, rtol=1e-2,
                                optimal_status=MOI.LOCALLY_SOLVED)
