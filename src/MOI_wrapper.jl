@@ -485,6 +485,37 @@ function MOI.delete(model::Optimizer, ci::MOI.ConstraintIndex{MOI.SingleVariable
     return
 end
 
+function _fill_jacobian_terms(jac::Matrix, x, row, terms::Vector{MOI.ScalarAffineTerm{Float64}})
+    for term in terms
+        jac[row, term.variable_index.value] += term.coefficient
+    end
+end
+function _fill_jacobian_terms(jac::Matrix, x, row, terms::Vector{MOI.ScalarQuadraticTerm{Float64}})
+    for term in terms
+        jac[row, term.variable_index_1.value] += term.coefficient * x[term.variable_index_2.value]
+        if term.variable_index_1 != term.variable_index_2
+            jac[row, term.variable_index_2.value] += term.coefficient * x[term.variable_index_1.value]
+        end
+    end
+end
+function _fill_jacobian(jac::Matrix, x, offset, constraints::Vector{<:ConstraintInfo{MOI.ScalarAffineFunction{Float64}}})
+    for (k, con) in enumerate(constraints)
+        _fill_jacobian_terms(jac, x, offset + k, con.func.terms)
+    end
+end
+function _fill_jacobian(jac::Matrix, x, offset, constraints::Vector{<:ConstraintInfo{MOI.ScalarQuadraticFunction{Float64}}})
+    for (k, con) in enumerate(constraints)
+        _fill_jacobian_terms(jac, x, offset + k, con.func.affine_terms)
+        _fill_jacobian_terms(jac, x, offset + k, con.func.quadratic_terms)
+    end
+end
+
+function _fill_result(result::Vector, x, offset, constraints::Vector)
+    for (k, con) in enumerate(constraints)
+        result[offset + k] = MOI.Utilities.eval_variables(vi -> x[vi.value], con.func) - MOI.constant(con.set)
+    end
+end
+
 function MOI.add_constraint(model::Optimizer, v::MOI.SingleVariable, eq::MOI.EqualTo{Float64})
     vi = v.variable
     MOI.throw_if_not_valid(model, vi)
@@ -982,15 +1013,19 @@ function MOI.optimize!(model::Optimizer)
                         jac[col, constrmap[row]] += Jac_val[k]
                     end
                 end
+                _fill_jacobian(jac, x, num_nl_eq, model.linear_eq_constraints)
+                _fill_jacobian(jac, x, num_nl_eq + length(model.linear_eq_constraints), model.quadratic_eq_constraints)
             end
             MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
             for (ctr, idx) in enumerate(nleqidx)
                 bounds = model.nlp_data.constraint_bounds[idx]
                 result[ctr] = g_vec[idx] - bounds.upper
             end
+            _fill_result(result, x, num_nl_eq, model.linear_eq_constraints)
+            _fill_result(result, x, num_nl_eq + length(model.linear_eq_constraints), model.quadratic_eq_constraints)
         end
 
-        equality_constraint!(model.inner, g_eq, fill(model.options["constrtol_abs"], num_nl_eq))
+        equality_constraint!(model.inner, g_eq, fill(model.options["constrtol_abs"], num_nl_eq + length(model.linear_eq_constraints) + length(model.quadratic_eq_constraints)))
     end
 
     # inequalities need to be massaged a bit
@@ -1016,6 +1051,8 @@ function MOI.optimize!(model::Optimizer)
                         jac[col, constrmap[row] + 1] -= Jac_val[k]
                     end
                 end
+                _fill_jacobian(jac, x, num_nl_ineq, model.linear_le_constraints)
+                _fill_jacobian(jac, x, num_nl_ineq + length(model.linear_le_constraints), model.quadratic_le_constraints)
             end
             MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
             for row in 1:num_nl_constraints
@@ -1030,9 +1067,11 @@ function MOI.optimize!(model::Optimizer)
                     result[constrmap[row] + 1] = bounds.lower - g_vec[row]
                 end
             end
+            _fill_result(result, x, num_nl_ineq, model.linear_le_constraints)
+            _fill_result(result, x, num_nl_ineq + length(model.linear_le_constraints), model.quadratic_le_constraints)
         end
 
-        inequality_constraint!(model.inner, g_ineq, fill(model.options["constrtol_abs"], num_nl_ineq))
+        inequality_constraint!(model.inner, g_ineq, fill(model.options["constrtol_abs"], num_nl_ineq + length(model.linear_le_constraints) + length(model.quadratic_le_constraints)))
     end
 
     # If nothing is provided, the default starting value is 0.0.
