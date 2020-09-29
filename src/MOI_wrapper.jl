@@ -42,6 +42,9 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     options::Dict{String, Any}
 
     # Solution attributes.
+    objective_value::Float64
+    solution::Vector{Float64}
+    status::Symbol
     solve_time::Float64
 end
 
@@ -90,7 +93,7 @@ const DEFAULT_OPTIONS = Dict{String, Any}(
 function Optimizer()
     return Optimizer(nothing, VariableInfo[], empty_nlp_data(), MOI.FEASIBILITY_SENSE,
                      nothing, [], [], [], [], nothing,
-                     false, copy(DEFAULT_OPTIONS), NaN)
+                     false, copy(DEFAULT_OPTIONS), NaN, Float64[], :NOT_CALLED, NaN)
 end
 
 MOI.supports(::Optimizer, ::MOI.NLPBlock) = true
@@ -611,23 +614,6 @@ macro define_constraint_dual_start(function_type, set_type, prefix)
     end
 end
 
-@define_constraint_dual_start(MOI.ScalarAffineFunction{Float64},
-                          MOI.LessThan{Float64}, linear_le)
-@define_constraint_dual_start(MOI.ScalarAffineFunction{Float64},
-                          MOI.EqualTo{Float64}, linear_eq)
-@define_constraint_dual_start(MOI.ScalarQuadraticFunction{Float64},
-                          MOI.LessThan{Float64}, quadratic_le)
-@define_constraint_dual_start(MOI.ScalarQuadraticFunction{Float64},
-                          MOI.EqualTo{Float64}, quadratic_eq)
-
-function MOI.supports(::Optimizer, ::MOI.NLPBlockDualStart)
-    return true
-end
-function MOI.set(model::Optimizer, ::MOI.NLPBlockDualStart, values)
-    model.nlp_dual_start = -values
-    return
-end
-
 function MOI.set(model::Optimizer, ::MOI.NLPBlock, nlp_data::MOI.NLPBlockData)
     model.nlp_data = nlp_data
     return
@@ -985,22 +971,22 @@ function MOI.optimize!(model::Optimizer)
     end
     vector_storage!(model.inner, model.options["vector_storage"])
 
-    lower_bounds!(m.inner, [model.inner.variable_info[i].lower_bound for i in 1:num_variables])
-    upper_bounds!(m.inner, [model.inner.variable_info[i].upper_bound for i in 1:num_variables])
+    lower_bounds!(model.inner, [model.variable_info[i].lower_bound for i in 1:num_variables])
+    upper_bounds!(model.inner, [model.variable_info[i].upper_bound for i in 1:num_variables])
 
     nleqidx = findall(bound -> bound.lower == bound.upper, model.nlp_data.constraint_bounds) # indices of equalities
     nlineqidx = findall(bound -> bound.lower != bound.upper, model.nlp_data.constraint_bounds)
 
-    num_nl_constraints = length(model.constraint_bounds)
+    num_nl_constraints = length(model.nlp_data.constraint_bounds)
 
     # map from eqidx/ineqidx to index in equalities/inequalities
     constrmap = zeros(Int, num_nl_constraints)
     for i in eachindex(nleqidx)
-        constrmap[eqidx[i]] = i
+        constrmap[nleqidx[i]] = i
     end
     ineqcounter = 1
-    for i in eachindex(ineqidx)
-        k = ineqidx[i]
+    for i in eachindex(nlineqidx)
+        k = nlineqidx[i]
         constrmap[k] = ineqcounter
         bounds = model.nlp_data.constraint_bounds[k]
         if isinf(bounds.lower) || isinf(bounds.upper)
@@ -1010,9 +996,9 @@ function MOI.optimize!(model::Optimizer)
         end
     end
     num_nl_ineq = ineqcounter - 1
-    num_nl_eq = length(eqidx)
+    num_nl_eq = length(nleqidx)
 
-    isderivativefree = string(m.algorithm)[2] == 'N'
+    isderivativefree = string(model.options["algorithm"])[2] == 'N'
     if isderivativefree
         requested_features = Symbol[]
     else
@@ -1021,371 +1007,183 @@ function MOI.optimize!(model::Optimizer)
 
     MOI.initialize(model.nlp_data.evaluator, requested_features)
 
-    if sense != MOI.FEASIBILITY_SENSE
+    if model.sense == MOI.FEASIBILITY_SENSE
+        # If we don't give any objective to NLopt, it throws the error:
+        # invalid NLopt arguments: NULL args to nlopt_optimize
+        function z(x::Vector, grad::Vector)
+            fill!(grad, 0.0)
+            return 0.0
+        end
+        min_objective!(model.inner, z)
+    else
         function f(x::Vector, grad::Vector)
             if length(grad) > 0
                 eval_objective_gradient(model, grad, x)
             end
             return eval_objective(model, x)
         end
-        if sense == MOI.MIN_SENSE
-            min_objective!(m.inner, f)
+        if model.sense == MOI.MIN_SENSE
+            min_objective!(model.inner, f)
         else
-            max_objective!(m.inner, f)
+            max_objective!(model.inner, f)
         end
     end
 
-    # TODO: Reuse model.inner for incremental solves if possible.
-    num_variables = length(model.variable_info)
-    num_linear_le_constraints = length(model.linear_le_constraints)
-    num_linear_eq_constraints = length(model.linear_eq_constraints)
-    nlp_row_offset = nlp_constraint_offset(model)
-    num_quadratic_constraints = nlp_constraint_offset(model) -
-                                quadratic_le_offset(model)
-    num_nlp_constraints = length(model.nlp_data.constraint_bounds)
-    num_constraints = num_nlp_constraints + nlp_row_offset
+    Jac_IJ = num_nl_constraints > 0 ? MOI.jacobian_structure(model.nlp_data.evaluator) : (Int[], Int[])
+    Jac_val = zeros(length(Jac_IJ))
+    g_vec = zeros(num_nl_constraints)
+    MOI.eval_constraint_jacobian(model.nlp_data.evaluator, Jac_val, zeros(num_variables))
 
-    evaluator = model.nlp_data.evaluator
-    features = MOI.features_available(evaluator)
-    has_hessian = (:Hess in features)
-    init_feat = [:Grad]
-    has_hessian && push!(init_feat, :Hess)
-    num_nlp_constraints > 0 && push!(init_feat, :Jac)
-
-    MOI.initialize(evaluator, init_feat)
-    jacobian_sparsity = jacobian_structure(model)
-    hessian_sparsity = has_hessian ? hessian_lagrangian_structure(model) : []
-
-    # Objective callback
-    if model.sense == MOI.MIN_SENSE
-        objective_scale = 1.0
-    elseif model.sense == MOI.MAX_SENSE
-        objective_scale = -1.0
-    else # FEASIBILITY_SENSE
-        # TODO: This could produce confusing solver output if a nonzero
-        # objective is set.
-        objective_scale = 0.0
-    end
-
-    eval_f_cb(x) = objective_scale * eval_objective(model, x)
-
-    # Objective gradient callback
-    function eval_grad_f_cb(x, grad_f)
-        eval_objective_gradient(model, grad_f, x)
-        rmul!(grad_f,objective_scale)
-    end
-
-    # Constraint value callback
-    eval_g_cb(x, g) = eval_constraint(model, g, x)
-
-    # Jacobian callback
-    function eval_jac_g_cb(x, mode, rows, cols, values)
-        if mode == :Structure
-            for i in 1:length(jacobian_sparsity)
-                rows[i] = jacobian_sparsity[i][1]
-                cols[i] = jacobian_sparsity[i][2]
-            end
-        else
-            eval_constraint_jacobian(model, values, x)
-        end
-    end
-
-    if has_hessian
-        # Hessian callback
-        function eval_h_cb(x, mode, rows, cols, obj_factor,
-            lambda, values)
-            if mode == :Structure
-                for i in 1:length(hessian_sparsity)
-                    rows[i] = hessian_sparsity[i][1]
-                    cols[i] = hessian_sparsity[i][2]
+    if num_nl_eq > 0
+        function g_eq(result::Vector, x::Vector, jac::Matrix)
+            if length(jac) > 0
+                fill!(jac, 0.0)
+                MOI.eval_constraint_jacobian(model.nlp_data.evaluator, Jac_val, x)
+                for k in 1:length(Jac_val)
+                    row, col = Jac_IJ[k]
+                    bounds = model.nlp_data.constraint_bounds[row]
+                    if bounds.lower == bounds.upper
+                        jac[col, constrmap[row]] += Jac_val[k]
+                    end
                 end
-            else
-                obj_factor *= objective_scale
-                eval_hessian_lagrangian(model, values, x, obj_factor, lambda)
+            end
+            MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
+            for (ctr, idx) in enumerate(nleqidx)
+                bounds = model.nlp_data.constraint_bounds[idx]
+                result[ctr] = g_vec[idx] - bounds.upper
             end
         end
-    else
-        eval_h_cb = nothing
+
+        equality_constraint!(model.inner, g_eq, fill(model.options["constrtol_abs"], num_nl_eq))
     end
 
-    x_l = [v.lower_bound for v in model.variable_info]
-    x_u = [v.upper_bound for v in model.variable_info]
+    # inequalities need to be massaged a bit
+    # f(x) <= u   =>  f(x) - u <= 0
+    # f(x) >= l   =>  l - f(x) <= 0
 
-    constraint_lb, constraint_ub = constraint_bounds(model)
-
-    start_time = time()
-
-    model.inner = createProblem(num_variables, x_l, x_u, num_constraints,
-                            constraint_lb, constraint_ub,
-                            length(jacobian_sparsity),
-                            length(hessian_sparsity),
-                            eval_f_cb, eval_g_cb, eval_grad_f_cb, eval_jac_g_cb,
-                            eval_h_cb)
-
-    # Ipopt crashes by default if NaN/Inf values are returned from the
-    # evaluation callbacks. This option tells Ipopt to explicitly check for them
-    # and return Invalid_Number_Detected instead. This setting may result in a
-    # minor performance loss and can be overwritten by specifying
-    # check_derivatives_for_naninf="no".
-    addOption(model.inner, "check_derivatives_for_naninf", "yes")
-
-    if !has_hessian
-        addOption(model.inner, "hessian_approximation", "limited-memory")
-    end
-    if num_nlp_constraints == 0 && num_quadratic_constraints == 0
-        addOption(model.inner, "jac_c_constant", "yes")
-        addOption(model.inner, "jac_d_constant", "yes")
-        if !model.nlp_data.has_objective
-            # We turn on this option if all constraints are linear and the
-            # objective is linear or quadratic. From the documentation, it's
-            # unclear if it may also apply if the constraints are at most
-            # quadratic.
-            addOption(model.inner, "hessian_constant", "yes")
+    if num_nl_ineq > 0
+        function g_ineq(result::Vector, x::Vector, jac::Matrix)
+            if length(jac) > 0
+                fill!(jac, 0.0)
+                MOI.eval_constraint_jacobian(model.nlp_data.evaluator, Jac_val, x)
+                for k in 1:length(Jac_val)
+                    row, col = Jac_IJ[k]
+                    bounds = model.nlp_data.constraint_bounds[row]
+                    bounds.lower == bounds.upper && continue
+                    if isinf(bounds.lower) # upper bound
+                        jac[col, constrmap[row]] += Jac_val[k]
+                    elseif isinf(bounds.upper) # lower bound
+                        jac[col, constrmap[row]] -= Jac_val[k]
+                    else
+                        # boxed
+                        jac[col, constrmap[row]] += Jac_val[k]
+                        jac[col, constrmap[row] + 1] -= Jac_val[k]
+                    end
+                end
+            end
+            MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
+            for row in 1:num_nl_constraints
+                bounds = model.nlp_data.constraint_bounds[row]
+                bounds.lower == bounds.upper && continue
+                if isinf(bounds.lower)
+                    result[constrmap[row]] = g_vec[row] - bounds.upper
+                elseif isinf(bounds.upper)
+                    result[constrmap[row]] = bounds.lower - g_vec[row]
+                else
+                    result[constrmap[row]] = g_vec[row] - bounds.upper
+                    result[constrmap[row] + 1] = bounds.lower - g_vec[row]
+                end
+            end
         end
+
+        inequality_constraint!(model.inner, g_ineq, fill(model.options["constrtol_abs"], num_nl_ineq))
     end
 
     # If nothing is provided, the default starting value is 0.0.
-    model.inner.x = zeros(num_variables)
+    model.solution = zeros(num_variables)
     for (i, v) in enumerate(model.variable_info)
         if v.start !== nothing
-            model.inner.x[i] = v.start
+            model.solution[i] = v.start
         else
             if v.has_lower_bound && v.has_upper_bound
                 if 0.0 <= v.lower_bound
-                    model.inner.x[i] = v.lower_bound
+                    model.solution[i] = v.lower_bound
                 elseif v.upper_bound <= 0.0
-                    model.inner.x[i] = v.upper_bound
+                    model.solution[i] = v.upper_bound
                 end
             elseif v.has_lower_bound
-                model.inner.x[i] = max(0.0, v.lower_bound)
-            else
-                model.inner.x[i] = min(0.0, v.upper_bound)
+                model.solution[i] = max(0.0, v.lower_bound)
+            elsemodel.solution
+                model.solution[i] = min(0.0, v.upper_bound)
             end
         end
     end
 
-    if model.nlp_dual_start === nothing
-        model.nlp_dual_start = zeros(Float64, num_nlp_constraints)
-    end
+    start_time = time()
 
-    mult_g_start = [
-        [info.dual_start for info in model.linear_le_constraints];
-        [info.dual_start for info in model.linear_eq_constraints];
-        [info.dual_start for info in model.quadratic_le_constraints];
-        [info.dual_start for info in model.quadratic_eq_constraints];
-        model.nlp_dual_start
-    ]
-    model.inner.mult_g = [start === nothing ? 0.0 : start
-                          for start in mult_g_start]
-    model.inner.mult_x_L = [v.lower_bound_dual_start === nothing ? 0.0 : v.lower_bound_dual_start
-                            for v in model.variable_info]
-    model.inner.mult_x_U = [v.upper_bound_dual_start === nothing ? 0.0 : v.lower_bound_dual_start
-                            for v in model.variable_info]
-
-    model.silent && addOption(model.inner, "print_level", 0)
-
-    for (name, value) in model.options
-        addOption(model.inner, name, value)
-    end
-    solveProblem(model.inner)
+    model.objective_value, _, model.status = optimize!(model.inner, model.solution)
 
     model.solve_time = time() - start_time
     return
 end
 
 function MOI.get(model::Optimizer, ::MOI.TerminationStatus)
-    if model.inner === nothing
+    if model.status == :NOT_CALLED
         return MOI.OPTIMIZE_NOT_CALLED
-    end
-    status = ApplicationReturnStatus[model.inner.status]
-    if status == :Solve_Succeeded || status == :Feasible_Point_Found
+    elseif model.status == :SUCCESS || model.status == :FTOL_REACHED || model.status == :XTOL_REACHED
         return MOI.LOCALLY_SOLVED
-    elseif status == :Infeasible_Problem_Detected
-        return MOI.LOCALLY_INFEASIBLE
-    elseif status == :Solved_To_Acceptable_Level
+    elseif model.status == :ROUNDOFF_LIMITED
         return MOI.ALMOST_LOCALLY_SOLVED
-    elseif status == :Search_Direction_Becomes_Too_Small
-        return MOI.NUMERICAL_ERROR
-    elseif status == :Diverging_Iterates
-        return MOI.NORM_LIMIT
-    elseif status == :User_Requested_Stop
-        return MOI.INTERRUPTED
-    elseif status == :Maximum_Iterations_Exceeded
+    elseif model.status == :MAXEVAL_REACHED
         return MOI.ITERATION_LIMIT
-    elseif status == :Maximum_CpuTime_Exceeded
+    elseif model.status == :MAXTIME_REACHED
         return MOI.TIME_LIMIT
-    elseif status == :Restoration_Failed
-        return MOI.NUMERICAL_ERROR
-    elseif status == :Error_In_Step_Computation
-        return MOI.NUMERICAL_ERROR
-    elseif status == :Invalid_Option
-        return MOI.INVALID_OPTION
-    elseif status == :Not_Enough_Degrees_Of_Freedom
-        return MOI.INVALID_MODEL
-    elseif status == :Invalid_Problem_Definition
-        return MOI.INVALID_MODEL
-    elseif status == :Invalid_Number_Detected
-        return MOI.INVALID_MODEL
-    elseif status == :Unrecoverable_Exception
-        return MOI.OTHER_ERROR
-    elseif status == :NonIpopt_Exception_Thrown
-        return MOI.OTHER_ERROR
-    elseif status == :Insufficient_Memory
-        return MOI.MEMORY_LIMIT
+    elseif model.status == :STOPVAL_REACHED || model.status == :FORCED_STOP
+        return MOI.OTHER_LIMIT
     else
-        error("Unrecognized Ipopt status $status")
+        error("Unknown status $(model.status)")
     end
 end
 
 function MOI.get(model::Optimizer, ::MOI.RawStatusString)
-    return string(ApplicationReturnStatus[model.inner.status])
+    return string(model.status)
 end
 
 # Ipopt always has an iterate available.
 function MOI.get(model::Optimizer, ::MOI.ResultCount)
-    return (model.inner !== nothing) ? 1 : 0
+    return model.status == :NOT_CALLED ? 0 : 1
 end
 
 function MOI.get(model::Optimizer, attr::MOI.PrimalStatus)
     if !(1 <= attr.N <= MOI.get(model, MOI.ResultCount()))
         return MOI.NO_SOLUTION
     end
-    status = ApplicationReturnStatus[model.inner.status]
-    if status == :Solve_Succeeded
+    if model.status == :SUCCESS || model.status == :FTOL_REACHED || model.status == :XTOL_REACHED
         return MOI.FEASIBLE_POINT
-    elseif status == :Feasible_Point_Found
-        return MOI.FEASIBLE_POINT
-    elseif status == :Solved_To_Acceptable_Level
-        # Solutions are only guaranteed to satisfy the "acceptable" convergence
-        # tolerances.
+    elseif model.status == :ROUNDOFF_LIMITED
         return MOI.NEARLY_FEASIBLE_POINT
-    elseif status == :Infeasible_Problem_Detected
-        return MOI.INFEASIBLE_POINT
-    else
-        return MOI.UNKNOWN_RESULT_STATUS
-    end
-end
-
-function MOI.get(model::Optimizer, attr::MOI.DualStatus)
-    if !(1 <= attr.N <= MOI.get(model, MOI.ResultCount()))
-        return MOI.NO_SOLUTION
-    end
-    status = ApplicationReturnStatus[model.inner.status]
-    if status == :Solve_Succeeded
-        return MOI.FEASIBLE_POINT
-    elseif status == :Feasible_Point_Found
-        return MOI.FEASIBLE_POINT
-    elseif status == :Solved_To_Acceptable_Level
-        # Solutions are only guaranteed to satisfy the "acceptable" convergence
-        # tolerances.
-        return MOI.NEARLY_FEASIBLE_POINT
-    elseif status == :Infeasible_Problem_Detected
-        # TODO: What is the interpretation of the dual in this case?
+    elseif model.status in (:STOPVAL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED, :FORCED_STOP)
         return MOI.UNKNOWN_RESULT_STATUS
     else
-        return MOI.UNKNOWN_RESULT_STATUS
+        error("Unknown status $(model.status)")
     end
 end
 
 function MOI.get(model::Optimizer, attr::MOI.ObjectiveValue)
     MOI.check_result_index_bounds(model, attr)
-    scale = (model.sense == MOI.MAX_SENSE) ? -1 : 1
-    return scale * model.inner.obj_val
+    return model.objective_value
 end
 
-# TODO: This is a bit off, because the variable primal should be available
-# only after a solve. If model.inner is initialized but we haven't solved, then
-# the primal values we return do not have the intended meaning.
 function MOI.get(model::Optimizer, attr::MOI.VariablePrimal, vi::MOI.VariableIndex)
     MOI.check_result_index_bounds(model, attr)
     MOI.throw_if_not_valid(model, vi)
-    return model.inner.x[vi.value]
+    return model.solution[vi.value]
 end
-
-macro define_constraint_primal(function_type, set_type, prefix)
-    constraint_array = Symbol(string(prefix) * "_constraints")
-    offset_function = Symbol(string(prefix) * "_offset")
-    quote
-        function MOI.get(model::Optimizer, attr::MOI.ConstraintPrimal,
-                         ci::MOI.ConstraintIndex{$function_type, $set_type})
-            MOI.check_result_index_bounds(model, attr)
-            if !(1 <= ci.value <= length(model.$(constraint_array)))
-                error("Invalid constraint index ", ci.value)
-            end
-            return model.inner.g[ci.value + $offset_function(model)]
-        end
-    end
-end
-
-@define_constraint_primal(MOI.ScalarAffineFunction{Float64},
-                          MOI.LessThan{Float64}, linear_le)
-@define_constraint_primal(MOI.ScalarAffineFunction{Float64},
-                          MOI.EqualTo{Float64}, linear_eq)
-@define_constraint_primal(MOI.ScalarQuadraticFunction{Float64},
-                          MOI.LessThan{Float64}, quadratic_le)
-@define_constraint_primal(MOI.ScalarQuadraticFunction{Float64},
-                          MOI.EqualTo{Float64}, quadratic_eq)
 
 function MOI.get(model::Optimizer, attr::MOI.ConstraintPrimal,
                  ci::MOI.ConstraintIndex{MOI.SingleVariable,
                                          <:Union{MOI.LessThan{Float64}, MOI.GreaterThan{Float64}, MOI.EqualTo{Float64}}})
     MOI.check_result_index_bounds(model, attr)
     MOI.throw_if_not_valid(model, ci)
-    return model.inner.x[ci.value]
-end
-
-macro define_constraint_dual(function_type, set_type, prefix)
-    constraint_array = Symbol(string(prefix) * "_constraints")
-    offset_function = Symbol(string(prefix) * "_offset")
-    quote
-        function MOI.get(model::Optimizer, attr::MOI.ConstraintDual,
-                         ci::MOI.ConstraintIndex{$function_type, $set_type})
-            MOI.check_result_index_bounds(model, attr)
-            if !(1 <= ci.value <= length(model.$(constraint_array)))
-                error("Invalid constraint index ", ci.value)
-            end
-            # TODO: Unable to find documentation in Ipopt about the signs of duals.
-            # Rescaling by -1 here seems to pass the MOI tests.
-            return -1 * model.inner.mult_g[ci.value + $offset_function(model)]
-        end
-    end
-end
-
-@define_constraint_dual(MOI.ScalarAffineFunction{Float64},
-                          MOI.LessThan{Float64}, linear_le)
-@define_constraint_dual(MOI.ScalarAffineFunction{Float64},
-                          MOI.EqualTo{Float64}, linear_eq)
-@define_constraint_dual(MOI.ScalarQuadraticFunction{Float64},
-                          MOI.LessThan{Float64}, quadratic_le)
-@define_constraint_dual(MOI.ScalarQuadraticFunction{Float64},
-                          MOI.EqualTo{Float64}, quadratic_eq)
-
-function MOI.get(model::Optimizer, attr::MOI.ConstraintDual,
-                 ci::MOI.ConstraintIndex{MOI.SingleVariable,
-                                         MOI.LessThan{Float64}})
-    MOI.check_result_index_bounds(model, attr)
-    MOI.throw_if_not_valid(model, ci)
-    # MOI convention is for feasible LessThan duals to be nonpositive.
-    return -1 * model.inner.mult_x_U[ci.value]
-end
-
-function MOI.get(model::Optimizer, attr::MOI.ConstraintDual,
-                 ci::MOI.ConstraintIndex{MOI.SingleVariable,
-                                         MOI.GreaterThan{Float64}})
-    MOI.check_result_index_bounds(model, attr)
-    MOI.throw_if_not_valid(model, ci)
-    return model.inner.mult_x_L[ci.value]
-end
-
-function MOI.get(model::Optimizer, attr::MOI.ConstraintDual,
-                 ci::MOI.ConstraintIndex{MOI.SingleVariable,
-                                         MOI.EqualTo{Float64}})
-    MOI.check_result_index_bounds(model, attr)
-    MOI.throw_if_not_valid(model, ci)
-    return model.inner.mult_x_L[ci.value] - model.inner.mult_x_U[ci.value]
-end
-
-function MOI.get(model::Optimizer, attr::MOI.NLPBlockDual)
-    MOI.check_result_index_bounds(model, attr)
-    return -1 * model.inner.mult_g[(1 + nlp_constraint_offset(model)):end]
+    return model.solution[ci.value]
 end
