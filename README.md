@@ -119,8 +119,8 @@ b2 = 1
 @NLconstraint(m, x2 >= (a1*x1+b1)^3)
 @NLconstraint(m, x2 >= (a2*x1+b2)^3)
 
-fix(x1, 1.234)
-fix(x2, 5.678)
+set_start_value(x1, 1.234)
+set_start_value(x2, 5.678)
 
 optimize!(model)
 
