@@ -16,7 +16,7 @@ optimization algorithms, including:
 See the [NLopt introduction](http://ab-initio.mit.edu/wiki/index.php/NLopt_Introduction)
 for a further overview of the types of problems it addresses.
 
-NLopt can be used either by accessing it's specialized API or by using the generic [MathProgBase](https://github.com/JuliaOpt/MathProgBase.jl) interface for nonlinear
+NLopt can be used either by accessing it's specialized API or by using the generic [MathOptInterface](https://github.com/jump-dev/MathOptInterface.jl) or [MathProgBase](https://github.com/JuliaOpt/MathProgBase.jl) interfaces for nonlinear
 optimization. Both methods are documented below.
 
 ## Installation
@@ -27,11 +27,11 @@ On Windows and OS X platforms, NLopt binaries will be automatically installed.
 On other platforms, Julia will attempt to build NLopt from source;
 be sure to have a compiler installed.
 
-## Using with MathProgBase
+## Using with MathOptInterface
 
-NLopt implements the [MathProgBase interface](http://mathprogbasejl.readthedocs.org/en/latest/nlp.html) for nonlinear optimization, which means that it can be used interchangeably with other optimization packages from modeling packages like [JuMP](https://github.com/JuliaOpt/JuMP.jl) or when providing hand-written derivatives. Note that NLopt does not exploit sparsity of Jacobians.
+NLopt implements the [MathOptInterface interface](https://jump.dev/MathOptInterface.jl/dev/apireference/#Nonlinear-programming-(NLP)-1) for nonlinear optimization, which means that it can be used interchangeably with other optimization packages from modeling packages like [JuMP](https://github.com/jump-dev/JuMP.jl) or when providing hand-written derivatives. Note that NLopt does not exploit sparsity of Jacobians.
 
-The NLopt solver is named ``NLoptSolver`` and takes parameters:
+The NLopt solver is named ``NLopt.Optimizer`` and takes parameters:
 
  - ``algorithm``
  - ``stopval``
@@ -104,7 +104,8 @@ The same problem can be solved by using the JuMP interface to NLopt:
 using JuMP
 using NLopt
 
-m = Model(solver=NLoptSolver(algorithm=:LD_MMA))
+model = Model(NLopt.Optimizer)
+set_optimizer_attribute(model, "algorithm", :LD_MMA)
 
 a1 = 2
 b1 = 0
@@ -118,19 +119,19 @@ b2 = 1
 @NLconstraint(m, x2 >= (a1*x1+b1)^3)
 @NLconstraint(m, x2 >= (a2*x1+b2)^3)
 
-setvalue(x1, 1.234)
-setvalue(x2, 5.678)
+set_start_value(x1, 1.234)
+set_start_value(x2, 5.678)
 
-status = solve(m)
+optimize!(model)
 
-println("got ", getobjectivevalue(m), " at ", [getvalue(x1),getvalue(x2)])
+println("got ", objective_value(model), " at ", [value(x1), value(x2)])
 ```
 The output should be:
 ```
 got 0.5443310477213124 at [0.3333333342139688,0.29629628951338166]
 ```
 
-Note that the MathProgBase interface sets slightly different convergence tolerances by default,
+Note that the MathOptInterface interface sets slightly different convergence tolerances by default (these default values are given by the `NLopt.DEFAULT_OPTIONS` dictionary),
 so the outputs from the two problems are not identical.
 
 ## Reference
