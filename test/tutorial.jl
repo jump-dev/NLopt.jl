@@ -30,6 +30,13 @@ opt.min_objective = myfunc
 opt.inequality_constraint = (x,g) -> myconstraint(x,g,2,0)
 opt.inequality_constraint = (x,g) -> myconstraint(x,g,-1,1)
 
+# test algorithm-parameter API
+opt.params["verbosity"] = 0
+opt.params["inner_maxeval"] = 10
+opt.params["dual_alg"] = NLopt.LD_MMA
+@test opt.params == Dict("verbosity"=>0, "inner_maxeval"=>10, "dual_alg"=>Int(NLopt.LD_MMA))
+@test get(opt.params, "foobar", 3.14159) === 3.14159
+
 (minf,minx,ret) = optimize(opt, [1.234, 5.678])
 println("got $minf at $minx after $count iterations (returned $ret)")
 
