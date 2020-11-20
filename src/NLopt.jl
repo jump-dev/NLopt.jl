@@ -478,6 +478,43 @@ for c in (:inequality, :equality)
 end
 
 ############################################################################
+# Dict-like API for generic algorithm properties
+
+"""
+    OptParams <: AbstractDict{String, Float64}
+
+Dictionary-like structure for accessing algorithm-specific parameters for
+an NLopt optimization object `opt`, returned by `opt.params`.   Use this
+object to both set and view these string-keyed numeric parameters.
+"""
+struct OptParams <: AbstractDict{String, Float64}
+    o::Opt
+end
+
+Base.length(p::OptParams) = Int(ccall(("nlopt_num_params",libnlopt), Cuint, (_Opt,), p.o))
+
+Base.haskey(p::OptParams, s::AbstractString) = Bool(ccall(("nlopt_has_param",libnlopt), Cint, (_Opt,Cstring), p.o, s))
+Base.get(p::OptParams, s::AbstractString, defaultval::Float64) =
+    ccall(("nlopt_get_param",libnlopt), Cdouble, (_Opt,Cstring,Cdouble), p.o, s, defaultval)
+Base.get(p::OptParams, s::AbstractString, defaultval) =
+    haskey(p, s) ? ccall(("nlopt_get_param",libnlopt), Cdouble, (_Opt,Cstring,Cdouble), p.o, s, NaN) : defaultval
+Base.setindex!(p::OptParams, v::Real, s::AbstractString) =
+    chk(p.o, ccall(("nlopt_set_param",libnlopt), Result, (_Opt,Cstring,Cdouble), p.o, s, v))
+Base.setindex!(p::OptParams, v::Algorithm, s::AbstractString) =
+    setindex!(p, Int(v), s)
+
+function Base.iterate(p::OptParams, state=0)
+    if state ≥ length(p)
+        return nothing
+    else
+        name_ptr = ccall(("nlopt_nth_param",libnlopt), Ptr{UInt8}, (_Opt,Cuint), p.o, state)
+        @assert name_ptr != C_NULL
+        name = unsafe_string(name_ptr)
+        return (name => p[name], state+1)
+    end
+end
+
+############################################################################
 # property-based getters setters opt.foo for Julia 0.7
 # … at some point we will deprecate the old interface.
 
@@ -514,6 +551,8 @@ function Base.getproperty(o::Opt, p::Symbol)
         return numevals(o)
     elseif p === :errmsg
         return errmsg(o)
+    elseif p === :params
+        return OptParams(o)
     else
         error("type Opt has no readable property $p")
     end
@@ -565,7 +604,7 @@ function Base.setproperty!(o::Opt, p::Symbol, x)
 end
 
 Base.propertynames(o::Opt) =
-   (:lower_bounds, :upper_bounds, :stopval, :ftol_rel, :ftol_abs, :xtol_rel, :xtol_abs, :maxeval, :maxtime, :force_stop, :population, :vector_storage, :initial_step, :algorithm, :local_optimizer, :default_initial_step, :initial_step, :min_objective, :max_objective, :inequality_constraint, :equality_constraint, :numevals, :errmsg)
+   (:lower_bounds, :upper_bounds, :stopval, :ftol_rel, :ftol_abs, :xtol_rel, :xtol_abs, :maxeval, :maxtime, :force_stop, :population, :vector_storage, :initial_step, :algorithm, :local_optimizer, :default_initial_step, :initial_step, :min_objective, :max_objective, :inequality_constraint, :equality_constraint, :numevals, :errmsg, :params)
 
 ############################################################################
 # Perform the optimization:
