@@ -217,7 +217,7 @@ function chk(o::Opt, result::Result)
             e = nlopt_exception
             if e !== nothing && !isa(e, ForcedStop)
                 nlopt_exception = nothing
-                rethrow(e)
+                throw(e)
             end
         else
             error("nlopt failure $result", _errmsg(o))
@@ -618,7 +618,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     ret = ccall((:nlopt_optimize,libnlopt), Result, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
-    ret == INVALID_ARGS && chk(o, ret)
+    chk(o, ret)
     return (opt_f[1], x, Symbol(ret))
 end
 
