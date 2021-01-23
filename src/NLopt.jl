@@ -195,6 +195,18 @@ struct ForcedStop <: Exception end
 # cache current exception for forced stop
 nlopt_exception = nothing
 
+struct SavedException{E} <: Exception
+    e :: E
+    bt :: Vector
+end
+
+import Base: show
+function Base.show(io::IO, e::SavedException)
+    show(io, e.e)
+    println(io, "\nOriginal stack trace:")
+    Base.show_backtrace(io, e.bt)
+end
+
 function errmsg(o::Opt)
     msg = ccall((:nlopt_get_errmsg,libnlopt), Ptr{UInt8}, (_Opt,), o)
     return msg == C_NULL ? nothing : unsafe_string(msg)
@@ -392,7 +404,7 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
         return res::Cdouble
     catch e
         global nlopt_exception
-        nlopt_exception = e
+        nlopt_exception = nlopt_exception = isa(e, ForcedStop) ? e : SavedException(e, catch_backtrace())
         force_stop!(d.o::Opt)
         return 0.0 # ignored by nlopt
     end
@@ -452,7 +464,7 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
             : unsafe_wrap(Array, grad, (convert(Int, n),convert(Int, m))))
     catch e
         global nlopt_exception
-        nlopt_exception = e
+        nlopt_exception = isa(e, ForcedStop) ? e : SavedException(e, catch_backtrace())
         force_stop!(d.o::Opt)
     end
     nothing
