@@ -6,6 +6,7 @@
 include("tutorial.jl")
 include("fix133.jl")
 include("MOI_wrapper.jl")
+include("exceptions.jl")
 
 using NLopt
 using Test
