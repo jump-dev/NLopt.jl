@@ -215,8 +215,8 @@ function chk(o::Opt, result::Result)
         elseif result == FORCED_STOP
             global nlopt_exception
             e = nlopt_exception
+            nlopt_exception = nothing
             if e !== nothing && !isa(e, ForcedStop)
-                nlopt_exception = nothing
                 throw(e)
             end
         else
