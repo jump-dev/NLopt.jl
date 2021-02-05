@@ -428,10 +428,10 @@ end
 
 function remove_constraints!(o::Opt)
     resize!(getfield(o, :cb), 1)
-    chkn(ccall((:nlopt_remove_inequality_constraints,libnlopt),
-               Result, (_Opt,), o))
-    chkn(ccall((:nlopt_remove_equality_constraints,libnlopt),
-               Result, (_Opt,), o))
+    chk(o, ccall((:nlopt_remove_inequality_constraints,libnlopt),
+                 Result, (_Opt,), o))
+    chk(o, ccall((:nlopt_remove_equality_constraints,libnlopt),
+                 Result, (_Opt,), o))
 end
 
 ############################################################################
