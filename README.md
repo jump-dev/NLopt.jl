@@ -112,17 +112,17 @@ b1 = 0
 a2 = -1
 b2 = 1
 
-@variable(m, x1)
-@variable(m, x2 >= 0)
+@variable(model, x1)
+@variable(model, x2 >= 0)
 
-@NLobjective(m, Min, sqrt(x2))
-@NLconstraint(m, x2 >= (a1*x1+b1)^3)
-@NLconstraint(m, x2 >= (a2*x1+b2)^3)
+@NLobjective(model, Min, sqrt(x2))
+@NLconstraint(model, x2 >= (a1*x1+b1)^3)
+@NLconstraint(model, x2 >= (a2*x1+b2)^3)
 
 set_start_value(x1, 1.234)
 set_start_value(x2, 5.678)
 
-optimize!(model)
+JuMP.optimize!(model)
 
 println("got ", objective_value(model), " at ", [value(x1), value(x2)])
 ```
