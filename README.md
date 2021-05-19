@@ -29,7 +29,7 @@ be sure to have a compiler installed.
 
 ## Using with MathOptInterface
 
-NLopt implements the [MathOptInterface interface](https://jump.dev/MathOptInterface.jl/dev/apireference/#Nonlinear-programming-(NLP)-1) for nonlinear optimization, which means that it can be used interchangeably with other optimization packages from modeling packages like [JuMP](https://github.com/jump-dev/JuMP.jl) or when providing hand-written derivatives. Note that NLopt does not exploit sparsity of Jacobians.
+NLopt implements the [MathOptInterface interface](https://jump.dev/MathOptInterface.jl/stable/reference/nonlinear/) for nonlinear optimization, which means that it can be used interchangeably with other optimization packages from modeling packages like [JuMP](https://github.com/jump-dev/JuMP.jl) or when providing hand-written derivatives. Note that NLopt does not exploit sparsity of Jacobians.
 
 The NLopt solver is named ``NLopt.Optimizer`` and takes parameters:
 
