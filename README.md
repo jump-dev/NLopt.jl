@@ -122,7 +122,7 @@ b2 = 1
 set_start_value(x1, 1.234)
 set_start_value(x2, 5.678)
 
-optimize!(model)
+JuMP.optimize!(model)
 
 println("got ", objective_value(model), " at ", [value(x1), value(x2)])
 ```
