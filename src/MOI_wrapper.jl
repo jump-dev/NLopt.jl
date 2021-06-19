@@ -64,15 +64,9 @@ function MOI.eval_objective_gradient(::EmptyNLPEvaluator, g, x)
     return
 end
 MOI.jacobian_structure(::EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
-MOI.hessian_lagrangian_structure(::EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
 function MOI.eval_constraint_jacobian(::EmptyNLPEvaluator, J, x)
     return
 end
-function MOI.eval_hessian_lagrangian(::EmptyNLPEvaluator, H, x, σ, μ)
-    @assert length(H) == 0
-    return
-end
-
 
 empty_nlp_data() = MOI.NLPBlockData([], EmptyNLPEvaluator(), false)
 
@@ -381,9 +375,6 @@ end
 function MOI.add_variable(model::Optimizer)
     push!(model.variable_info, VariableInfo())
     return MOI.VariableIndex(length(model.variable_info))
-end
-function MOI.add_variables(model::Optimizer, n::Int)
-    return [MOI.add_variable(model) for i in 1:n]
 end
 MOI.is_valid(model::Optimizer, vi::MOI.VariableIndex) = vi.value in eachindex(model.variable_info)
 function MOI.is_valid(model::Optimizer, ci::MOI.ConstraintIndex{MOI.SingleVariable, LE})
@@ -753,36 +744,6 @@ function eval_constraint_jacobian(model::Optimizer, values, x)
     nlp_values = view(values, 1+offset:length(values))
     MOI.eval_constraint_jacobian(model.nlp_data.evaluator, nlp_values, x)
     return
-end
-
-function fill_hessian_lagrangian!(values, start_offset, scale_factor,
-                                  ::Union{MOI.SingleVariable,AFF,Nothing})
-    return 0
-end
-
-function fill_hessian_lagrangian!(values, start_offset, scale_factor,
-                                  quad::QUA)
-    for i in 1:length(quad.quadratic_terms)
-        values[start_offset + i] = scale_factor*quad.quadratic_terms[i].coefficient
-    end
-    return length(quad.quadratic_terms)
-end
-
-function eval_hessian_lagrangian(model::Optimizer, values, x, obj_factor, lambda)
-    offset = 0
-    if !model.nlp_data.has_objective
-        offset += fill_hessian_lagrangian!(values, 0, obj_factor,
-                                          model.objective)
-    end
-    for (i, info) in enumerate(model.quadratic_le_constraints)
-        offset += fill_hessian_lagrangian!(values, offset, lambda[i+quadratic_le_offset(model)], info.func)
-    end
-    for (i, info) in enumerate(model.quadratic_eq_constraints)
-        offset += fill_hessian_lagrangian!(values, offset, lambda[i+quadratic_eq_offset(model)], info.func)
-    end
-    nlp_values = view(values, 1 + offset : length(values))
-    nlp_lambda = view(lambda, 1 + nlp_constraint_offset(model) : length(lambda))
-    MOI.eval_hessian_lagrangian(model.nlp_data.evaluator, nlp_values, x, obj_factor, nlp_lambda)
 end
 
 function constraint_bounds(model::Optimizer)
