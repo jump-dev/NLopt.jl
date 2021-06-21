@@ -897,8 +897,6 @@ function MOI.optimize!(model::Optimizer)
         else
             max_objective!(model.inner, f)
         end
-        # TODO remove
-        f(zeros(num_variables), zeros(num_variables))
     end
 
     Jac_IJ = num_nl_constraints > 0 ? MOI.jacobian_structure(model.nlp_data.evaluator) : Tuple{Int,Int}[]
