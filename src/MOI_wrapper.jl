@@ -863,7 +863,6 @@ function MOI.optimize!(model::Optimizer)
     Jac_IJ = num_nl_constraints > 0 ? MOI.jacobian_structure(model.nlp_data.evaluator) : Tuple{Int,Int}[]
     Jac_val = zeros(length(Jac_IJ))
     g_vec = zeros(num_nl_constraints)
-    MOI.eval_constraint_jacobian(model.nlp_data.evaluator, Jac_val, zeros(num_variables))
 
     num_eq = num_nl_eq + length(model.linear_eq_constraints) + length(model.quadratic_eq_constraints)
 
