@@ -200,9 +200,10 @@ opt.max_objective = f
 
 depending on whether one wishes to minimize or maximize the objective function `f`, respectively. The function `f` should be of the form:
 ```julia
-function f(x::Vector, grad::Vector):
-    if length(grad) > 0:
+function f(x::Vector, grad::Vector)
+    if length(grad) > 0
         ...set grad to gradient, in-place...
+    end
     return ...value of f(x)...
 end
 ```
@@ -283,9 +284,10 @@ Here, `tol` is an array of the tolerances in each constraint
 dimension; the dimensionality `m` of the constraint is determined by
 `length(tol)`. The constraint function `c` must be of the form:
 ```julia
-function c(result::Vector, x::Vector, grad::Matrix):
-    if length(grad) > 0:
+function c(result::Vector, x::Vector, grad::Matrix)
+    if length(grad) > 0
         ...set grad to gradient, in-place...
+    end
     result[1] = ...value of c1(x)...
     result[2] = ...value of c2(x)...
     ...
