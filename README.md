@@ -134,6 +134,22 @@ got 0.5443310477213124 at [0.3333333342139688,0.29629628951338166]
 Note that the MathOptInterface interface sets slightly different convergence tolerances by default (these default values are given by the `NLopt.DEFAULT_OPTIONS` dictionary),
 so the outputs from the two problems are not identical.
 
+Some algorithms need a local optimizer. These are set with `local_optimizer`, e.g.,
+```julia
+model = Model(NLopt.Optimizer)
+set_optimizer_attribute(model, "algorithm", :AUGLAG)
+set_optimizer_attribute(model, "local_optimizer", :LD_LBFGS)
+```
+To parametrize the local optimizer, pass use the `NLopt.Opt` interface, e.g.,
+```julia
+model = Model(NLopt.Optimizer)
+set_optimizer_attribute(model, "algorithm", :AUGLAG)
+local_optimizer = NLopt.Opt(:LD_LBFGS, num_variables)
+local_optimizer.xtol_rel = 1e-4
+set_optimizer_attribute(model, "local_optimizer", local_optimizer)
+```
+where `num_variables` is the number of variables of the optimization problem.
+
 ## Reference
 
 The main purpose of this section is to document the syntax and unique
