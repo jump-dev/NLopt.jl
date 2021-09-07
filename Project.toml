@@ -1,6 +1,6 @@
 name = "NLopt"
 uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
-version = "0.6.3"
+version = "0.6.4"
 
 [deps]
 MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
