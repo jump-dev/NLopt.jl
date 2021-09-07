@@ -84,6 +84,7 @@ const DEFAULT_OPTIONS = Dict{String, Any}(
     "population" => 0,
     "seed" => nothing,
     "vector_storage" => 0,
+    "local_optimizer" => nothing,
 )
 
 function Optimizer()
@@ -776,6 +777,15 @@ function MOI.optimize!(model::Optimizer)
     # TODO: Reuse model.inner for incremental solves if possible.
     num_variables = length(model.variable_info)
     model.inner = Opt(model.options["algorithm"], num_variables)
+    local_optimizer = model.options["local_optimizer"]
+    if local_optimizer !== nothing
+        if local_optimizer isa Symbol
+            local_optimizer = Opt(local_optimizer, num_variables)
+        else
+            local_optimizer = Opt(local_optimizer.algorithm, num_variables)
+        end
+        local_optimizer!(model.inner, local_optimizer)
+    end
 
     # load parameters
     stopval!(model.inner, model.options["stopval"])

@@ -23,8 +23,27 @@ end
     @test !MOIU.supports_default_copy_to(optimizer, true)
 end
 
-@testset "Non-Linear tests" begin
+function test_nlp(solver)
+    optimizer = MOI.instantiate(solver)
     MOIT.nlptest(optimizer, config)
+end
+@testset "Non-Linear tests" begin
+    test_nlp(solver)
+    test_nlp(MOI.OptimizerWithAttributes(
+        NLopt.Optimizer,
+        "algorithm" => :AUGLAG,
+        "local_optimizer" => :LD_LBFGS,
+    ))
+    # NLP tests have different number of variables so we
+    # cannot run through them all with the same `local_optimizer`.
+    # Let's just do hs071.
+    local_optimizer = Opt(:LD_LBFGS, 4)
+    opt.xtol_rel = 1e-6
+    MOIT.hs071_test(MOI.instantiate(MOI.OptimizerWithAttributes(
+        NLopt.Optimizer,
+        "algorithm" => :AUGLAG,
+        "local_optimizer" => local_optimizer,
+    )), config)
 end
 
 @testset "Testing getters" begin
@@ -98,7 +117,16 @@ end
         # NumberOfThreads not supported
         "number_threads",
         # Infeasibility and unboundedness not detected by NLopt
-        "solve_unbounded_model"
+        "solve_unbounded_model",
+        "solve_farkas_interval_lower",
+        "solve_farkas_lessthan",
+        "solve_farkas_equalto_lower",
+        "solve_farkas_equalto_upper",
+        "solve_farkas_variable_lessthan",
+        "solve_farkas_variable_lessthan_max",
+        "solve_farkas_greaterthan",
+        "solve_farkas_interval_upper",
+        "solve_farkas_lessthan",
     ]
     MOIT.unittest(bridged, config, exclude)
 end
