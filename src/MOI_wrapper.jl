@@ -992,6 +992,12 @@ function MOI.get(model::Optimizer, ::MOI.TerminationStatus)
     elseif model.status == :FORCED_STOP
         # May be due to an error in the callbacks `f`, `g_eq` and `g_ineq` defined in `MOI.optimize!`
         return MOI.OTHER_ERROR
+    elseif model.status == :OUT_OF_MEMORY
+        return MOI.MEMORY_LIMIT
+    elseif model.status == :INVALID_ARGS
+        return MOI.INVALID_OPTION
+    elseif model.status == :FAILURE
+        return MOI.OTHER_ERROR
     else
         error("Unknown status $(model.status)")
     end
@@ -1014,7 +1020,7 @@ function MOI.get(model::Optimizer, attr::MOI.PrimalStatus)
         return MOI.FEASIBLE_POINT
     elseif model.status == :ROUNDOFF_LIMITED
         return MOI.NEARLY_FEASIBLE_POINT
-    elseif model.status in (:STOPVAL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED, :FORCED_STOP)
+    elseif model.status in (:STOPVAL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED, :FORCED_STOP, :OUT_OF_MEMORY, :INVALID_ARGS, :FAILURE)
         return MOI.UNKNOWN_RESULT_STATUS
     else
         error("Unknown status $(model.status)")
