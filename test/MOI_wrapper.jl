@@ -2,7 +2,7 @@ using Test
 
 using MathOptInterface
 const MOI = MathOptInterface
-const MOIT = MOI.Test
+const MOIT = MOI.DeprecatedTest
 const MOIU = MOI.Utilities
 const MOIB = MOI.Bridges
 
@@ -11,7 +11,7 @@ const solver = MOI.OptimizerWithAttributes(NLopt.Optimizer, "algorithm" => :LD_S
 
 optimizer = MOI.instantiate(solver)
 
-const config = MOIT.TestConfig(atol=1e-2, rtol=1e-2, duals=false,
+const config = MOIT.Config(atol=1e-2, rtol=1e-2, duals=false,
                                optimal_status=MOI.LOCALLY_SOLVED)
 
 @testset "SolverName" begin
@@ -19,8 +19,7 @@ const config = MOIT.TestConfig(atol=1e-2, rtol=1e-2, duals=false,
 end
 
 @testset "supports_default_copy_to" begin
-    @test MOIU.supports_default_copy_to(optimizer, false)
-    @test !MOIU.supports_default_copy_to(optimizer, true)
+    @test MOI.supports_incremental_interface(optimizer)
 end
 
 function test_nlp(solver)
@@ -46,13 +45,14 @@ end
     )), config)
 end
 
-@testset "Testing getters" begin
-    MOI.Test.copytest(MOI.instantiate(solver, with_bridge_type=Float64), MOIU.Model{Float64}())
-end
+# TODO Needs MOI v0.10.1: https://github.com/jump-dev/MathOptInterface.jl/pull/1591
+#@testset "Testing getters" begin
+#    MOIT.copytest(MOI.instantiate(solver, with_bridge_type=Float64), MOIU.Model{Float64}())
+#end
 
 @testset "Bounds set twice" begin
-    MOI.Test.set_lower_bound_twice(optimizer, Float64)
-    MOI.Test.set_upper_bound_twice(optimizer, Float64)
+    MOIT.set_lower_bound_twice(optimizer, Float64)
+    MOIT.set_upper_bound_twice(optimizer, Float64)
 end
 
 MOI.empty!(optimizer)
