@@ -45,10 +45,9 @@ end
     )), config)
 end
 
-# TODO Needs MOI v0.10.1: https://github.com/jump-dev/MathOptInterface.jl/pull/1591
-#@testset "Testing getters" begin
-#    MOIT.copytest(MOI.instantiate(solver, with_bridge_type=Float64), MOIU.Model{Float64}())
-#end
+@testset "Testing getters" begin
+    MOIT.copytest(MOI.instantiate(solver, with_bridge_type=Float64), MOIU.Model{Float64}())
+end
 
 @testset "Bounds set twice" begin
     MOIT.set_lower_bound_twice(optimizer, Float64)
