@@ -77,7 +77,7 @@ const DEFAULT_OPTIONS = Dict{String, Any}(
 )
 
 function Optimizer()
-    return Optimizer(MOI.Utilities.VariablesContainer{Float64}(), Union{Nothing,Float64}[],
+    return Optimizer(nothing, MOI.Utilities.VariablesContainer{Float64}(), Union{Nothing,Float64}[],
                      empty_nlp_data(), MOI.FEASIBILITY_SENSE,
                      nothing, [], [], [], [],
                      false, copy(DEFAULT_OPTIONS), NaN, Float64[], Float64[], Float64[], Float64[], Float64[], :NOT_CALLED, NaN)
@@ -194,7 +194,7 @@ end
 
 function MOI.get(
     model::Optimizer,
-    ::Union{MOI.ConstraintFunction,MOI.ConstraintSet},
+    attr::Union{MOI.ConstraintFunction,MOI.ConstraintSet},
     ci::MOI.ConstraintIndex{MOI.VariableIndex}
 )
     return MOI.get(model.variables, attr, ci)
@@ -332,7 +332,7 @@ function check_inbounds(model::Optimizer, quad::QUA)
     end
 end
 
-function MOI.add_constraint(model::Optimizer, vi::MOI.VariableIndex, set::BOUNDS{T})
+function MOI.add_constraint(model::Optimizer, vi::MOI.VariableIndex, set::BOUNDS)
     return MOI.add_constraint(model.variables, vi, set)
 end
 
