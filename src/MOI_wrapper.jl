@@ -85,20 +85,9 @@ end
 
 MOI.supports(::Optimizer, ::MOI.NLPBlock) = true
 
-function MOI.supports(::Optimizer,
-                      ::MOI.ObjectiveFunction{MOI.VariableIndex})
-    return true
-end
-
-function MOI.supports(::Optimizer,
-    ::MOI.ObjectiveFunction{AFF})
-    return true
-end
-
-function MOI.supports(::Optimizer,
-    ::MOI.ObjectiveFunction{QUA})
-    return true
-end
+MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{MOI.VariableIndex}) = true
+MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{AFF}) = true
+MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{QUA}) = true
 
 MOI.supports(::Optimizer, ::MOI.ObjectiveSense) = true
 
