@@ -37,7 +37,6 @@ end
     # cannot run through them all with the same `local_optimizer`.
     # Let's just do hs071.
     local_optimizer = Opt(:LD_LBFGS, 4)
-    opt.xtol_rel = 1e-6
     MOIT.hs071_test(MOI.instantiate(MOI.OptimizerWithAttributes(
         NLopt.Optimizer,
         "algorithm" => :AUGLAG,
