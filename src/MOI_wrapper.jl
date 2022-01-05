@@ -397,7 +397,7 @@ function starting_value(optimizer::Optimizer, i)
         return optimizer.starting_values[i]
     else
         v = optimizer.variables
-        return min(max(zero(T), v.lower[i]), v.upper[i])
+        return min(max(0.0, v.lower[i]), v.upper[i])
     end
 end
 
