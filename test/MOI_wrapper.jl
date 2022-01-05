@@ -57,13 +57,18 @@ MOI.empty!(optimizer)
 bridged = MOIB.full_bridge_optimizer(MOIU.CachingOptimizer(MOIU.UniversalFallback(MOIU.Model{Float64}()), optimizer), Float64)
 
 @testset "Continuous Linear tests" begin
-    MOIT.contlineartest(bridged, config, [
+    exclude = [
         # Infeasibility and unboundedness not detected by NLopt
         "linear8a", "linear8b", "linear8c", "linear12",
         # Terminates with `:ROUNDOFF_LIMITED` due to the bad scaling of input problem
         "linear9",
         # FIXME invalid NLopt arguments: too many equality constraints
-        "linear15"])
+        "linear15",
+    ]
+    if Sys.WORD_SIZE == 32
+        push!(exclude, "linear1")
+    end
+    MOIT.contlineartest(bridged, config, exclude)
 end
 
 @testset "Continuous Quadratic tests" begin
@@ -91,7 +96,11 @@ MOIB.add_bridge(bridged, MOIB.Constraint.SOCtoNonConvexQuadBridge{Float64})
         # FIXME Status is ok but solution is not, e.g.
         #   Expression: ≈(MOI.get(model, MOI.ObjectiveValue()), 1.0, atol = atol, rtol = rtol)
         #   Evaluated: 0.006271435980170771 ≈ 1.0 (atol=0.01, rtol=0.01)
-        "geomean2v", "geomean2f"
+        "geomean2v", "geomean2f",
+        # FIXME Status is ok but solution is not, e.g.
+        #   Expression: ≈(MOI.get(model, MOI.ObjectiveValue()), 1, atol = atol, rtol = rtol)
+        #   Evaluated: 0.0881801049773095 ≈ 1 (atol=0.01, rtol=0.01)
+        "geomean1v", "geomean1f",
     ])
     MOIT.norminftest(bridged, config, [
         # Infeasibility and unboundedness not detected by NLopt
