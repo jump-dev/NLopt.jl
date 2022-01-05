@@ -282,7 +282,7 @@ function MOI.is_empty(model::Optimizer)
 end
 
 function MOI.add_variable(model::Optimizer)
-    push!(model.starting_values, NaN)
+    push!(model.starting_values, nothing)
     return MOI.add_variable(model.variables)
 end
 function MOI.is_valid(model::Optimizer, index::Union{MOI.VariableIndex,MOI.ConstraintIndex{MOI.VariableIndex}})
