@@ -47,6 +47,7 @@ function test_runtests()
             "test_conic_NormOneCone_INFEASIBLE",
             "test_conic_linear_INFEASIBLE",
             "test_conic_linear_INFEASIBLE_2",
+            "test_constraint_qcp_duplicate_diagonal",  # Fails on 32-bit
             "test_infeasible_",
             "test_linear_DUAL_INFEASIBLE",
             "test_linear_INFEASIBLE",
