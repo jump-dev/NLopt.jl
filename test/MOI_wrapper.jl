@@ -17,19 +17,8 @@ function runtests()
     return
 end
 
-function test_SolverName()
-    @test MOI.get(NLopt.Optimizer(), MOI.SolverName()) == "NLopt"
-    return
-end
-
-function test_supports_incremental_interface()
-    @test MOI.supports_incremental_interface(NLopt.Optimizer())
-    return
-end
-
 function test_runtests()
     model = MOI.instantiate(NLopt.Optimizer; with_bridge_type = Float64)
-    # MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_MMA)
     MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_SLSQP)
     MOI.Test.runtests(
         model,
@@ -38,16 +27,15 @@ function test_runtests()
             atol = 1e-2,
             rtol = 1e-2,
             exclude = Any[
-                MOI.ConstraintName,
-                MOI.VariableName,
-                MOI.SolverVersion,
-                MOI.ConstraintDual,
-                MOI.DualObjectiveValue,
-                MOI.NLPBlockDual,
-                MOI.ObjectiveBound,
-
-                MOI.VariableBasisStatus,
                 MOI.ConstraintBasisStatus,
+                MOI.ConstraintDual,
+                MOI.ConstraintName,
+                MOI.DualObjectiveValue,
+                MOI.ObjectiveBound,
+                MOI.NLPBlockDual,
+                MOI.SolverVersion,
+                MOI.VariableBasisStatus,
+                MOI.VariableName,
             ]
         ),
         exclude = String[
