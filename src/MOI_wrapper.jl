@@ -150,6 +150,14 @@ function MOI.is_empty(model::Optimizer)
            isempty(model.quadratic_eq_constraints)
 end
 
+function MOI.get(model::Optimizer, ::MOI.ListOfModelAttributesSet)
+    ret = MOI.AbstractModelAttribute[]
+    if model.objective !== nothing
+        push!(ret, MOI.get(model, MOI.ObjectiveFunctionType()))
+    end
+    return ret
+end
+
 MOI.supports_incremental_interface(::Optimizer) = true
 
 function MOI.copy_to(model::Optimizer, src::MOI.ModelLike)
@@ -328,6 +336,14 @@ end
 
 # Variables
 
+function MOI.get(model::Optimizer, ::MOI.ListOfVariableAttributesSet)
+    ret = MOI.AbstractVariableAttribute[]
+    if any(!isnothing, model.starting_values)
+        push!(ret, MOI.VariablePrimalStart())
+    end
+    return ret
+end
+
 function MOI.add_variable(model::Optimizer)
     push!(model.starting_values, nothing)
     return MOI.add_variable(model.variables)
@@ -401,6 +417,10 @@ end
 
 # constraints
 
+function MOI.get(::Optimizer, ::MOI.ListOfConstraintAttributesSet)
+    ret = MOI.AbstractConstraintAttribute[]
+    return ret
+end
 function MOI.is_valid(
     model::Optimizer,
     ci::MOI.ConstraintIndex{F,S},
@@ -546,6 +566,15 @@ function MOI.set(
     MOI.throw_if_not_valid(model, vi)
     model.starting_values[vi.value] = value
     return
+end
+
+function MOI.get(
+    model::Optimizer,
+    ::MOI.VariablePrimalStart,
+    vi::MOI.VariableIndex,
+)
+    MOI.throw_if_not_valid(model, vi)
+    return model.starting_values[vi.value]
 end
 
 # MOI.NLPBlock
