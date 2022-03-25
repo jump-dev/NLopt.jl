@@ -149,11 +149,12 @@ function Base.copy(o::Opt)
     end
     n = Opt(p)
 
-    cb = getfield(o.cb)
-    n.cb = similar(cb)
+    cb = getfield(o, :cb)
+    ncb = similar(cb)
+    setfield!(n, :cb, ncb)
     for i = 1:length(cb)
         try
-            n.cb[i] = Callback_Data(cb[i].f, n)
+            ncb[i] = Callback_Data(cb[i].f, n)
         catch e
             # if objective has not been set, cb[1] will throw
             # an UndefRefError, which is okay.
@@ -181,7 +182,7 @@ function Base.copy(o::Opt)
     ccall((:nlopt_munge_data,libnlopt), Cvoid, (_Opt, Ptr{Cvoid}, Any),
             n, munge_callback_ptr,
             p::Ptr{Cvoid} -> p==C_NULL ? C_NULL :
-                            pointer_from_objref(n.cb[cbi[p]]))
+                            pointer_from_objref(ncb[cbi[p]]))
 
     return n
 end
