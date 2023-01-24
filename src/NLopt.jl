@@ -474,7 +474,7 @@ for c in (:inequality, :equality)
         $cf(o::Opt, f::Function, tol::AbstractVector{<:Real}) =
            $cf(o, f, Array{Float64}(tol))
         $cf(o::Opt, m::Integer, f::Function, tol::Real=0.0) =
-           $cf(o, f, fill!(Cdouble(tol), m))
+           $cf(o, f, fill(Cdouble(tol), m))
     end
 end
 
