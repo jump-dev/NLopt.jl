@@ -13,3 +13,13 @@ using Test
     (minf, minx, ret) = optimize(opt, [2.0, 2.0])
     @test minx ≈ [1.0, 1.0]
 end
+
+@testset "Fix #132" begin
+    opt = Opt(:LN_COBYLA, 2)
+    err = ErrorException(
+        "Getting `initial_step` is unsupported. Use " *
+        "`initial_step(opt, x)` to access the initial step at a point `x`.",
+    )
+    @test_throws err opt.initial_step
+end
+
