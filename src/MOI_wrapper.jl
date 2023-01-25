@@ -18,7 +18,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
-    sense::MOI.OptimizationSense
+    sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
         MOI.VariableIndex,
         MOI.ScalarAffineFunction{Float64},
@@ -65,7 +65,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             MOI.Utilities.VariablesContainer{Float64}(),
             Union{Nothing,Float64}[],
             empty_nlp_data(),
-            MOI.FEASIBILITY_SENSE,
+            nothing,
             nothing,
             _ConstraintInfo{
                 MOI.ScalarAffineFunction{Float64},
@@ -129,7 +129,7 @@ function MOI.empty!(model::Optimizer)
     MOI.empty!(model.variables)
     empty!(model.starting_values)
     model.nlp_data = empty_nlp_data()
-    model.sense = MOI.FEASIBILITY_SENSE
+    model.sense = nothing
     model.objective = nothing
     empty!(model.linear_le_constraints)
     empty!(model.linear_eq_constraints)
@@ -143,7 +143,7 @@ function MOI.is_empty(model::Optimizer)
     return MOI.is_empty(model.variables) &&
            isempty(model.starting_values) &&
            model.nlp_data.evaluator isa EmptyNLPEvaluator &&
-           model.sense == MOI.FEASIBILITY_SENSE &&
+           model.sense == nothing &&
            isempty(model.linear_le_constraints) &&
            isempty(model.linear_eq_constraints) &&
            isempty(model.quadratic_le_constraints) &&
@@ -152,8 +152,12 @@ end
 
 function MOI.get(model::Optimizer, ::MOI.ListOfModelAttributesSet)
     ret = MOI.AbstractModelAttribute[]
+    if model.sense !== nothing
+        push!(ret, MOI.ObjectiveSense())
+    end
     if model.objective !== nothing
-        push!(ret, MOI.get(model, MOI.ObjectiveFunctionType()))
+        F = MOI.get(model, MOI.ObjectiveFunctionType())
+        push!(ret, MOI.ObjectiveFunction{F}())
     end
     return ret
 end
@@ -268,7 +272,9 @@ function MOI.set(
     return
 end
 
-MOI.get(model::Optimizer, ::MOI.ObjectiveSense) = model.sense
+function MOI.get(model::Optimizer, ::MOI.ObjectiveSense)
+    return something(model.sense, MOI.FEASIBILITY_SENSE)
+end
 
 # MOI.Silent
 
@@ -418,9 +424,9 @@ end
 # constraints
 
 function MOI.get(::Optimizer, ::MOI.ListOfConstraintAttributesSet)
-    ret = MOI.AbstractConstraintAttribute[]
-    return ret
+    return MOI.AbstractConstraintAttribute[]
 end
+
 function MOI.is_valid(
     model::Optimizer,
     ci::MOI.ConstraintIndex{F,S},
