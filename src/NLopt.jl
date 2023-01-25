@@ -545,7 +545,10 @@ function Base.getproperty(o::Opt, p::Symbol)
     elseif p === :vector_storage
         return vector_storage(o)
     elseif p === :initial_step
-        return initial_step(o)
+        error(
+            "Getting `initial_step` is unsupported. Use " *
+            "`initial_step(opt, x)` to access the initial step at a point `x`.",
+        )
     elseif p === :algorithm
         return algorithm(o)
     elseif p === :numevals
