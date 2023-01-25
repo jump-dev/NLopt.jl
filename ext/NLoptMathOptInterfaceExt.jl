@@ -659,7 +659,7 @@ end
 function fill_gradient!(grad, x, var::MOI.VariableIndex)
     fill!(grad, 0.0)
     grad[var.value] = 1.0
-    return retur
+    return
 end
 
 function fill_gradient!(grad, x, aff::MOI.ScalarAffineFunction{Float64})
