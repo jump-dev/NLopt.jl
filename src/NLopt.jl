@@ -630,8 +630,4 @@ end
 optimize(o::Opt, x::AbstractVector{<:Real}) =
   optimize!(o, copyto!(Array{Cdouble}(undef,length(x)), x))
 
-############################################################################
-
-include("MOI_wrapper.jl")
-
 end # module
