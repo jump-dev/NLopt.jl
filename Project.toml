@@ -3,21 +3,23 @@ uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
 version = "0.7.0"
 
 [deps]
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 NLopt_jll = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
 
 [compat]
 MathOptInterface = "1"
 NLopt_jll = "2.7"
-julia = "1.9"
-
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[weakdeps]
-MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
+julia = "1.6"
 
 [extensions]
 MathOptInterfaceExtension = ["MathOptInterface"]
 
+[extras]
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
 [targets]
 test = ["MathOptInterface", "Test"]
+
+[weakdeps]
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"

@@ -630,4 +630,11 @@ end
 optimize(o::Opt, x::AbstractVector{<:Real}) =
   optimize!(o, copyto!(Array{Cdouble}(undef,length(x)), x))
 
+if !isdefined(Base, :get_extension)
+    include("../ext/MathOptInterfaceExtension.jl")
+    # so that the struct defined there is added to this module in that module's init
+    using .MathOptInterfaceExtension
+    const global Optimizer = MathOptInterfaceExtension.Optimizer
+end
+
 end # module

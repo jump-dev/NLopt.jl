@@ -13,7 +13,9 @@ const MOI = MathOptInterface
 
 function __init__()
     # we need to add extension types back to the toplevel module
-    setglobal!(NLopt, :Optimizer, Optimizer)
+    @static if VERSION >= v"1.9"
+        setglobal!(NLopt, :Optimizer, Optimizer)
+    end
 end
 
 mutable struct _ConstraintInfo{F,S}
