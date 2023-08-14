@@ -633,7 +633,7 @@ optimize(o::Opt, x::AbstractVector{<:Real}) =
 if !isdefined(Base, :get_extension)
     include("../ext/MathOptInterfaceExtension.jl")
     using .MathOptInterfaceExtension
-    const global Optimizer = MathOptInterfaceExtension.Optimizer
+    const Optimizer = MathOptInterfaceExtension.Optimizer
 end
 
 end # module
