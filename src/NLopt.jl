@@ -631,9 +631,9 @@ optimize(o::Opt, x::AbstractVector{<:Real}) =
   optimize!(o, copyto!(Array{Cdouble}(undef,length(x)), x))
 
 if !isdefined(Base, :get_extension)
-    include("../ext/MathOptInterfaceExtension.jl")
-    using .MathOptInterfaceExtension
-    const Optimizer = MathOptInterfaceExtension.Optimizer
+    include("../ext/NLoptMathOptInterfaceExt.jl")
+    using .NLoptMathOptInterfaceExt
+    const Optimizer = NLoptMathOptInterfaceExt.Optimizer
 end
 
 end # module
