@@ -3,9 +3,20 @@
 # Use of this source code is governed by an MIT-style license that can be found
 # in the LICENSE.md file or at https://opensource.org/licenses/MIT.
 
+module NLoptMathOptInterfaceExt
+
+using NLopt
+
 import MathOptInterface
 
 const MOI = MathOptInterface
+
+function __init__()
+    # we need to add extension types back to the toplevel module
+    @static if VERSION >= v"1.9"
+        setglobal!(NLopt, :Optimizer, Optimizer)
+    end
+end
 
 mutable struct _ConstraintInfo{F,S}
     func::F
@@ -1177,3 +1188,5 @@ function MOI.get(
     MOI.throw_if_not_valid(model, ci)
     return model.constraint_primal_quadratic_eq[ci.value]
 end
+
+end # module

@@ -10,9 +10,6 @@ export Opt, NLOPT_VERSION, algorithm, algorithm_name, ForcedStop,
        min_objective!, max_objective!, equality_constraint!, inequality_constraint!, remove_constraints!,
        optimize!, optimize, Algorithm, Result
 
-import MathProgBase.SolverInterface
-import MathProgBase.SolverInterface.optimize!
-
 using NLopt_jll
 
 ############################################################################
@@ -633,9 +630,10 @@ end
 optimize(o::Opt, x::AbstractVector{<:Real}) =
   optimize!(o, copyto!(Array{Cdouble}(undef,length(x)), x))
 
-############################################################################
-
-include("MPB_wrapper.jl")
-include("MOI_wrapper.jl")
+if !isdefined(Base, :get_extension)
+    include("../ext/NLoptMathOptInterfaceExt.jl")
+    using .NLoptMathOptInterfaceExt
+    const Optimizer = NLoptMathOptInterfaceExt.Optimizer
+end
 
 end # module
