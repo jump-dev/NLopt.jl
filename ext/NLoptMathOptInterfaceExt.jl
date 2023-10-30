@@ -264,7 +264,7 @@ function MOI.get(
     ::MOI.ConstraintFunction,
     c::MOI.ConstraintIndex{F,S},
 ) where {F<:_F_TYPES,S}
-    return _constraints(model, F, S)[c.value].func
+    return copy(_constraints(model, F, S)[c.value].func)
 end
 
 function MOI.get(
