@@ -634,6 +634,10 @@ if !isdefined(Base, :get_extension)
     include("../ext/NLoptMathOptInterfaceExt.jl")
     using .NLoptMathOptInterfaceExt
     const Optimizer = NLoptMathOptInterfaceExt.Optimizer
+else
+    # declare this upfront so that the MathOptInterface extension can assign it 
+    # without creating a new global
+    global Optimizer
 end
 
 end # module
