@@ -630,14 +630,14 @@ end
 optimize(o::Opt, x::AbstractVector{<:Real}) =
   optimize!(o, copyto!(Array{Cdouble}(undef,length(x)), x))
 
-if !isdefined(Base, :get_extension)
+@static if !isdefined(Base, :get_extension)
     include("../ext/NLoptMathOptInterfaceExt.jl")
     using .NLoptMathOptInterfaceExt
     const Optimizer = NLoptMathOptInterfaceExt.Optimizer
 else
-    # declare this upfront so that the MathOptInterface extension can assign it 
+    # declare this upfront so that the MathOptInterface extension can assign it
     # without creating a new global
-    global Optimizer
+    global Optimizer::DataType
 end
 
 end # module
