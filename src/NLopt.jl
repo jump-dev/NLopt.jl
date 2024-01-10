@@ -637,7 +637,7 @@ optimize(o::Opt, x::AbstractVector{<:Real}) =
 else
     # declare this upfront so that the MathOptInterface extension can assign it
     # without creating a new global
-    global Optimizer::DataType
+    global Optimizer
 end
 
 end # module
