@@ -28,11 +28,11 @@ end
 end
 
 @testset "Fix #156" begin
-    @testset "Test that SavedException is thrown" begin
+    @testset "Test that CapturedException is thrown" begin
         f(x, g=[]) = (error("test error"); x[1]^2)
         opt = Opt(:LN_SBPLX, 1)
         opt.min_objective = f
-        @test_throws NLopt.SavedException{ErrorException} optimize(opt, [0.1234])
+        @test_throws CapturedException{ErrorException} optimize(opt, [0.1234])
         @test NLopt.nlopt_exception === nothing
         try
             optimize(opt, [0.1234])

@@ -197,25 +197,6 @@ struct ForcedStop <: Exception end
 # cache current exception for forced stop
 nlopt_exception = nothing
 
-"""
-    SavedException{E,B} <: Exception
-
-This exception wraps trapped exceptions during the optimize call, along with
-their backtrace, so that they can be rethrown once we exit optimize.
-
-It isn't sufficient just to re-throw because this will lose the backtrace
-information.
-"""
-struct SavedException{E,B} <: Exception
-    error::E
-    backtrace::Vector{B}
-end
-
-function Base.show(io::IO, e::SavedException)
-    show(io, e.error)
-    return Base.show_backtrace(io, e.backtrace)
-end
-
 function errmsg(o::Opt)
     msg = ccall((:nlopt_get_errmsg,libnlopt), Ptr{UInt8}, (_Opt,), o)
     return msg == C_NULL ? nothing : unsafe_string(msg)
@@ -415,7 +396,7 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
         if e isa ForcedStop
             global nlopt_exception = e
         else
-            global nlopt_exception = SavedException(e, catch_backtrace())
+            global nlopt_exception = CapturedException(e, catch_backtrace())
         end
         force_stop!(d.o::Opt)
         return 0.0 # ignored by nlopt
@@ -478,7 +459,7 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
         if e isa ForcedStop
             global nlopt_exception = e
         else
-            global nlopt_exception = SavedException(e, catch_backtrace())
+            global nlopt_exception = CapturedException(e, catch_backtrace())
         end
         force_stop!(d.o::Opt)
     end
