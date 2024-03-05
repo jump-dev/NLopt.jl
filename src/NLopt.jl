@@ -64,6 +64,12 @@ end
 
 const sym2alg = Dict(Symbol(i)=>i for i in instances(Algorithm))
 
+function Algorithm(name::Symbol)
+    alg = get(sym2alg, name, nothing)
+    alg === nothing && throw(ArgumentError("unknown algorithm $name"))
+    alg
+end
+
 # enum nlopt_result
 @enum Result::Cint begin
     FORCED_STOP=-5
@@ -118,11 +124,7 @@ mutable struct Opt
         end
         Opt(p)
     end
-    Opt(alg::Integer, n::Integer) = Opt(Algorithm(alg), n)
-    Opt(algorithm::Symbol, n::Integer) = Opt(try sym2alg[algorithm]
-                                             catch
-                         throw(ArgumentError("unknown algorithm $algorithm"))
-                                             end, n)
+    Opt(algorithm::Union{Integer,Symbol}, n::Integer) = Opt(Algorithm(algorithm), n)
 end
 
 Base.unsafe_convert(::Type{_Opt}, o::Opt) = getfield(o, :opt) # for passing to ccall
@@ -345,11 +347,7 @@ function algorithm_name(a::Algorithm)
     return unsafe_string(s)
 end
 
-algorithm_name(a::Integer) = algorithm_name(Algorithm(a))
-algorithm_name(a::Symbol) = algorithm_name(try sym2alg[a]
-                                           catch
-                             throw(ArgumentError("unknown algorithm $a"))
-                                           end)
+algorithm_name(a::Union{Integer,Symbol}) = algorithm_name(Algorithm(a))
 algorithm_name(o::Opt) = algorithm_name(algorithm(o))
 
 function Base.show(io::IO, ::MIME"text/plain", a::Algorithm)
