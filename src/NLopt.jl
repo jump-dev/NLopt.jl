@@ -67,7 +67,7 @@ const sym2alg = Dict(Symbol(i)=>i for i in instances(Algorithm))
 function Algorithm(name::Symbol)
     alg = get(sym2alg, name, nothing)
     alg === nothing && throw(ArgumentError("unknown algorithm $name"))
-    alg
+    return alg::Algorithm
 end
 
 # enum nlopt_result
