@@ -58,3 +58,8 @@ end
         @test NLopt.nlopt_exception === nothing
     end
 end
+
+@testset "invalid algorithms" begin
+    @test_throws ArgumentError("unknown algorithm BILL") Algorithm(:BILL)
+    @test_throws ArgumentError("unknown algorithm BILL") Opt(:BILL, 420)
+end
