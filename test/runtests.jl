@@ -26,3 +26,8 @@ end
     )
     @test_throws err opt.initial_step
 end
+
+@testset "invalid algorithms" begin
+    @test_throws ArgumentError("unknown algorithm BILL") Algorithm(:BILL)
+    @test_throws ArgumentError("unknown algorithm BILL") Opt(:BILL, 420)
+end
