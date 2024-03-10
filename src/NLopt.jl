@@ -219,9 +219,9 @@ function chk(o::Opt, result::Result)
         elseif result == FORCED_STOP
             global nlopt_exception
             e = nlopt_exception
+            nlopt_exception = nothing
             if e !== nothing && !isa(e, ForcedStop)
-                nlopt_exception = nothing
-                rethrow(e)
+                throw(e)
             end
         else
             error("nlopt failure $result", _errmsg(o))
@@ -391,8 +391,11 @@ function nlopt_callback_wrapper(n::Cuint, x::Ptr{Cdouble},
                           : unsafe_wrap(Array, grad, (convert(Int, n),))))
         return res::Cdouble
     catch e
-        global nlopt_exception
-        nlopt_exception = e
+        if e isa ForcedStop
+            global nlopt_exception = e
+        else
+            global nlopt_exception = CapturedException(e, catch_backtrace())
+        end
         force_stop!(d.o::Opt)
         return 0.0 # ignored by nlopt
     end
@@ -451,8 +454,11 @@ function nlopt_vcallback_wrapper(m::Cuint, res::Ptr{Cdouble},
             grad == C_NULL ? empty_jac
             : unsafe_wrap(Array, grad, (convert(Int, n),convert(Int, m))))
     catch e
-        global nlopt_exception
-        nlopt_exception = e
+        if e isa ForcedStop
+            global nlopt_exception = e
+        else
+            global nlopt_exception = CapturedException(e, catch_backtrace())
+        end
         force_stop!(d.o::Opt)
     end
     nothing
@@ -621,7 +627,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     ret = ccall((:nlopt_optimize,libnlopt), Result, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
-    ret == INVALID_ARGS && chk(o, ret)
+    chk(o, ret)
     return (opt_f[1], x, Symbol(ret))
 end
 
