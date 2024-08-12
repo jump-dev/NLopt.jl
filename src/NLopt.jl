@@ -223,8 +223,6 @@ function chk(o::Opt, result::Result)
             if e !== nothing && !isa(e, ForcedStop)
                 throw(e)
             end
-        else
-            error("nlopt failure $result", _errmsg(o))
         end
     end
     return nothing

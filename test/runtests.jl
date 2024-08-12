@@ -63,3 +63,28 @@ end
     @test_throws ArgumentError("unknown algorithm BILL") Algorithm(:BILL)
     @test_throws ArgumentError("unknown algorithm BILL") Opt(:BILL, 420)
 end
+
+@testset "Failure to converge shouldn't error" begin
+    function rosenbrock(x, G)
+        if length(G) > 0
+            G[1] = -2 * (1 - x[1]) - 400 * x[1] * (x[2] - x[1]^2)
+            G[2] = 200 * (x[2] - x[1]^2)
+        end
+        (1 - x[1])^2 + 100 * (x[2] - x[1]^2)^2
+    end
+    function circ_cons(res, x, J)
+        res[1] = x[1]^2 + x[2]^2 - 1.0
+        if length(J) > 0
+            J[1, 1] = 2x[1]
+            J[2, 1] = 2x[2]
+        end
+    end
+
+    opt = Opt(:AUGLAG, 2)
+    opt.local_optimizer = Opt(:LD_LBFGS, 2)
+    opt.min_objective = rosenbrock
+    NLopt.equality_constraint!(opt, circ_cons, [1e-8])
+    (minf, minx, ret) = optimize(opt, [0.5, 0.5])
+    @test minf < rosenbrock([0.5, 0.5], [])
+    @test sum(abs2, minx) ≈ 1.0
+end
