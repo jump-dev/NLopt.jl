@@ -87,4 +87,5 @@ end
     (minf, minx, ret) = optimize(opt, [0.5, 0.5])
     @test minf < rosenbrock([0.5, 0.5], [])
     @test sum(abs2, minx) ≈ 1.0
+    @test ret == :FAILURE
 end
