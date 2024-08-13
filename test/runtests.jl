@@ -70,7 +70,7 @@ end
             G[1] = -2 * (1 - x[1]) - 400 * x[1] * (x[2] - x[1]^2)
             G[2] = 200 * (x[2] - x[1]^2)
         end
-        (1 - x[1])^2 + 100 * (x[2] - x[1]^2)^2
+        return (1 - x[1])^2 + 100 * (x[2] - x[1]^2)^2
     end
     function circ_cons(res, x, J)
         res[1] = x[1]^2 + x[2]^2 - 1.0
@@ -78,8 +78,8 @@ end
             J[1, 1] = 2x[1]
             J[2, 1] = 2x[2]
         end
+        return
     end
-
     opt = Opt(:AUGLAG, 2)
     opt.local_optimizer = Opt(:LD_LBFGS, 2)
     opt.min_objective = rosenbrock
