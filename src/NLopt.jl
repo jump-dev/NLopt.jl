@@ -890,8 +890,9 @@ function optimize!(o::Opt, x::Vector{Cdouble})
         x,
         opt_f,
     )
-    chk(o, ret)
-    return (opt_f[1], x, Symbol(ret))
+    # We do not need to check the value of `ret`. Instead, we return to the user
+    # and let them decide what to do.
+    return opt_f[1], x, Symbol(ret)
 end
 
 function optimize(o::Opt, x::AbstractVector{<:Real})
