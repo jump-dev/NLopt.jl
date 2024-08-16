@@ -27,7 +27,7 @@ function test_runtests()
     MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_SLSQP)
     MOI.Test.runtests(
         model,
-        MOI.Test.Config(
+        MOI.Test.Config(;
             optimal_status = MOI.LOCALLY_SOLVED,
             atol = 1e-2,
             rtol = 1e-2,
@@ -41,8 +41,8 @@ function test_runtests()
                 MOI.SolverVersion,
                 MOI.VariableBasisStatus,
                 MOI.VariableName,
-            ]
-        ),
+            ],
+        );
         exclude = String[
             # TODO(odow): investigate failures. A lot of these are probably just
             # suboptimal solutions.
@@ -69,7 +69,7 @@ function test_runtests()
             "test_unbounded_",
             "test_solve_TerminationStatus_DUAL_INFEASIBLE",
             "test_solve_result_index",
-        ]
+        ],
     )
     return
 end
