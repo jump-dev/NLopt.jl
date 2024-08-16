@@ -12,7 +12,7 @@ using Test
 
 @testset "Fix #163" begin
     opt = Opt(:LN_COBYLA, 2)
-    opt.min_objective = (x, g) -> sum(x.^2)
+    opt.min_objective = (x, g) -> sum(x .^ 2)
     inequality_constraint!(opt, 2, (result, x, g) -> (result .= 1 .- x))
     (minf, minx, ret) = optimize(opt, [2.0, 2.0])
     @test minx ≈ [1.0, 1.0]
@@ -29,7 +29,7 @@ end
 
 @testset "Fix #156" begin
     @testset "Test that CapturedException is thrown" begin
-        f(x, g=[]) = (error("test error"); x[1]^2)
+        f(x, g = []) = (error("test error"); x[1]^2)
         opt = Opt(:LN_SBPLX, 1)
         opt.min_objective = f
         @test_throws CapturedException optimize(opt, [0.1234])
@@ -42,7 +42,7 @@ end
         end
     end
     @testset "Test that ForcedStop does not rethrow" begin
-        f(x, g=[]) = (throw(NLopt.ForcedStop()); x[1]^2)
+        f(x, g = []) = (throw(NLopt.ForcedStop()); x[1]^2)
         opt = Opt(:LN_SBPLX, 1)
         opt.min_objective = f
         fmin, xmin, ret = optimize(opt, [0.1234])
@@ -50,7 +50,7 @@ end
         @test NLopt.nlopt_exception === nothing
     end
     @testset "Test that no error works correctly" begin
-        f(x, g=[]) = (x[1]^2)
+        f(x, g = []) = (x[1]^2)
         opt = Opt(:LN_SBPLX, 1)
         opt.min_objective = f
         fmin, xmin, ret = optimize(opt, [0.1234])
