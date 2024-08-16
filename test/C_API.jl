@@ -144,7 +144,6 @@ function test_tutorial()
             grad[1] = 0
             grad[2] = 0.5 / sqrt(x[2])
         end
-        global count
         count::Int += 1
         println("f_$count($x)")
         return sqrt(x[2])
