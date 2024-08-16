@@ -890,8 +890,16 @@ function optimize!(o::Opt, x::Vector{Cdouble})
         x,
         opt_f,
     )
-    # We do not need to check the value of `ret`. Instead, we return to the user
-    # and let them decide what to do.
+    # We do not need to check the value of `ret`, except if it is a FORCED_STOP
+    # with a Julia-related exception from a callback
+    if ret == FORCED_STOP
+        global nlopt_exception
+        e = nlopt_exception
+        nlopt_exception = nothing
+        if e !== nothing && !(e isa ForcedStop)
+            throw(e)
+        end
+    end
     return opt_f[1], x, Symbol(ret)
 end
 
