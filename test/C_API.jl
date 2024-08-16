@@ -181,6 +181,33 @@ function test_tutorial()
     return
 end
 
+# It's not obvious why this test returns FAILURE. If it breaks in future, look
+# for something else.
+function test_return_FAILURE_from_optimize()
+    function objective_fn(x, grad)
+        if length(grad) > 0
+            grad[1] = -2 * (1 - x[1]) - 400 * x[1] * (x[2] - x[1]^2)
+            grad[2] = 200 * (x[2] - x[1]^2)
+        end
+        return (1 - x[1])^2 + 100 * (x[2] - x[1]^2)^2
+    end
+    function eq_constraint_fn(h, x, J)
+        if length(J) > 0
+            J[1, 1] = 2x[1]
+            J[2, 1] = 2x[2]
+        end
+        h[1] = x[1]^2 + x[2]^2 - 1.0
+        return
+    end
+    opt = Opt(:AUGLAG, 2)
+    opt.local_optimizer = Opt(:LD_LBFGS, 2)
+    opt.min_objective = objective_fn
+    equality_constraint!(opt, eq_constraint_fn, [1e-8])
+    _, _, ret = optimize(opt, [0.5, 0.5])
+    @test ret == :FAILURE
+    return
+end
+
 end  # module
 
 TestCAPI.runtests()
