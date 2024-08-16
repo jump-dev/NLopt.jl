@@ -223,6 +223,8 @@ function chk(o::Opt, result::Result)
             if e !== nothing && !isa(e, ForcedStop)
                 throw(e)
             end
+        else
+            error("nlopt failure $result", _errmsg(o))
         end
     end
     return nothing
@@ -625,7 +627,6 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     ret = ccall((:nlopt_optimize,libnlopt), Result, (_Opt, Ptr{Cdouble},
                                                      Ptr{Cdouble}),
                 o, x, opt_f)
-    chk(o, ret)
     return (opt_f[1], x, Symbol(ret))
 end
 
