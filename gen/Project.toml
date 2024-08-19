@@ -1,0 +1,6 @@
+[deps]
+Clang = "40e3b903-d033-50b4-a0cc-940c62c95e31"
+NLopt_jll = "079eb43e-fd8e-5478-9966-2cf3e3edb778"
+
+[compat]
+Clang = "0.17"

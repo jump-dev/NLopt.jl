@@ -5,50 +5,10 @@
 
 module NLopt
 
-export Opt,
-    NLOPT_VERSION,
-    algorithm,
-    algorithm_name,
-    ForcedStop,
-    lower_bounds!,
-    lower_bounds,
-    upper_bounds!,
-    upper_bounds,
-    stopval!,
-    stopval,
-    ftol_rel!,
-    ftol_rel,
-    ftol_abs!,
-    ftol_abs,
-    xtol_rel!,
-    xtol_rel,
-    xtol_abs!,
-    xtol_abs,
-    maxeval!,
-    maxeval,
-    maxtime!,
-    maxtime,
-    force_stop!,
-    force_stop,
-    population!,
-    population,
-    vector_storage!,
-    vector_storage,
-    initial_step!,
-    initial_step,
-    default_initial_step!,
-    local_optimizer!,
-    min_objective!,
-    max_objective!,
-    equality_constraint!,
-    inequality_constraint!,
-    remove_constraints!,
-    optimize!,
-    optimize,
-    Algorithm,
-    Result
+using CEnum: @cenum
+using NLopt_jll: libnlopt
 
-using NLopt_jll
+include("libnlopt.jl")
 
 ############################################################################
 # Mirrors of NLopt's C enum constants:
@@ -100,14 +60,17 @@ using NLopt_jll
     GN_AGS = 43
 end
 
-const sym2alg = Dict(Symbol(i) => i for i in instances(Algorithm))
+Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
+Base.convert(::Type{Algorithm}, r::nlopt_algorithm) = Algorithm(Int(r))
+
+const _SYMBOL_TO_ALGORITHM = Dict(Symbol(i) => i for i in instances(Algorithm))
 
 function Algorithm(name::Symbol)
-    alg = get(sym2alg, name, nothing)
-    if alg === nothing
+    algorithm = get(_SYMBOL_TO_ALGORITHM, name, nothing)
+    if algorithm === nothing
         throw(ArgumentError("unknown algorithm $name"))
     end
-    return alg::Algorithm
+    return algorithm::Algorithm
 end
 
 # enum nlopt_result
@@ -125,6 +88,9 @@ end
     MAXTIME_REACHED = 6
 end
 
+Base.convert(::Type{nlopt_result}, r::Result) = nlopt_result(Int(r))
+Base.convert(::Type{Result}, r::nlopt_result) = Result(Int(r))
+
 # so that result < 0 checks continue to work
 Base.isless(x::Integer, r::Result) = isless(x, Cint(r))
 Base.isless(r::Result, x::Integer) = isless(Cint(r), x)
@@ -135,22 +101,24 @@ Base.:(==)(r::Result, s::Symbol) = s == r
 ############################################################################
 # wrapper around nlopt_opt type
 
-const _Opt = Ptr{Cvoid} # nlopt_opt
-
 # pass both f and o to the callback so that we can handle exceptions
 mutable struct Callback_Data
     f::Function
     o::Any # should be Opt, but see Julia issue #269
 end
 
+function Base.unsafe_convert(::Type{Ptr{Cvoid}}, c::Callback_Data)
+    return pointer_from_objref(c)
+end
+
 mutable struct Opt
-    opt::_Opt
+    opt::Ptr{Cvoid}
 
     # need to store callback data for objective and constraints in
     # Opt so that they aren't garbage-collected.  cb[1] is the objective.
     cb::Vector{Callback_Data}
 
-    function Opt(p::_Opt)
+    function Opt(p::Ptr{Cvoid})
         opt = new(p, Array{Callback_Data}(undef, 1))
         finalizer(destroy, opt)
         return opt
@@ -160,13 +128,7 @@ mutable struct Opt
         if n < 0
             throw(ArgumentError("invalid dimension $n < 0"))
         end
-        p = ccall(
-            (:nlopt_create, libnlopt),
-            _Opt,
-            (Algorithm, Cuint),
-            algorithm,
-            n,
-        )
+        p = nlopt_create(algorithm, n)
         if p == C_NULL
             error("Error in nlopt_create")
         end
@@ -178,17 +140,13 @@ mutable struct Opt
     end
 end
 
-Base.unsafe_convert(::Type{_Opt}, o::Opt) = getfield(o, :opt) # for passing to ccall
+Base.unsafe_convert(::Type{Ptr{Cvoid}}, o::Opt) = getfield(o, :opt)
 
-destroy(o::Opt) = ccall((:nlopt_destroy, libnlopt), Cvoid, (_Opt,), o)
+destroy(o::Opt) = nlopt_destroy(o)
 
-function Base.ndims(o::Opt)
-    return Int(ccall((:nlopt_get_dimension, libnlopt), Cuint, (_Opt,), o))
-end
+Base.ndims(o::Opt)::Int = nlopt_get_dimension(o)
 
-function algorithm(o::Opt)
-    return ccall((:nlopt_get_algorithm, libnlopt), Algorithm, (_Opt,), o)
-end
+algorithm(o::Opt)::Algorithm = nlopt_get_algorithm(o)
 
 Base.show(io::IO, o::Opt) = print(io, "Opt($(algorithm(o)), $(ndims(o)))")
 
@@ -203,7 +161,7 @@ function munge_callback(p::Ptr{Cvoid}, f_::Ptr{Cvoid})
 end
 
 function Base.copy(o::Opt)
-    p = ccall((:nlopt_copy, libnlopt), _Opt, (_Opt,), o)
+    p = nlopt_copy(o)
     if p == C_NULL
         error("Error in nlopt_copy")
     end
@@ -235,16 +193,11 @@ function Base.copy(o::Opt)
         catch
         end
     end
-    munge_callback_ptr =
-        @cfunction(munge_callback, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}))
-    ccall(
-        (:nlopt_munge_data, libnlopt),
-        Cvoid,
-        (_Opt, Ptr{Cvoid}, Any),
+    c_fn = @cfunction(munge_callback, Ptr{Cvoid}, (Ptr{Cvoid}, Ptr{Cvoid}))
+    nlopt_munge_data(
         n,
-        munge_callback_ptr,
-        p::Ptr{Cvoid} ->
-            p == C_NULL ? C_NULL : pointer_from_objref(ncb[cbi[p]]),
+        c_fn,
+        p -> p == C_NULL ? C_NULL : pointer_from_objref(ncb[cbi[p]]),
     )
     return n
 end
@@ -258,7 +211,7 @@ struct ForcedStop <: Exception end
 nlopt_exception = nothing
 
 function errmsg(o::Opt)
-    msg = ccall((:nlopt_get_errmsg, libnlopt), Ptr{UInt8}, (_Opt,), o)
+    msg = nlopt_get_errmsg(o)
     return msg == C_NULL ? nothing : unsafe_string(msg)
 end
 
@@ -268,6 +221,9 @@ function _errmsg(o::Opt)
 end
 
 # check result and throw an exception if necessary
+chk(o::Opt, result::nlopt_result) = chk(o, convert(Result, result))
+chk(o::Opt, result::Integer) = chk(o, Result(result))
+
 function chk(o::Opt, result::Result)
     if result >= 0
         return
@@ -292,109 +248,108 @@ end
 ############################################################################
 # getting and setting scalar and vector parameters
 
-# make a quoted symbol expression out of the arguments
-qsym(args...) = Expr(:quote, Symbol(string(args...)))
+stopval(o::Opt) = nlopt_get_stopval(o)
+stopval!(o::Opt, val::Real) = chk(o, nlopt_set_stopval(o, val))
 
-# scalar parameters p of type T
-macro GETSET(T, p)
-    Tg = T == :Cdouble ? :Real : (T == :Cint || T == :Cuint ? :Integer : :Any)
-    ps = Symbol(string(p, "!"))
-    quote
-        function $(esc(p))(o::Opt)
-            return ccall(($(qsym("nlopt_get_", p)), libnlopt), $T, (_Opt,), o)
-        end
+ftol_rel(o::Opt) = nlopt_get_ftol_rel(o)
+ftol_rel!(o::Opt, val::Real) = chk(o, nlopt_set_ftol_rel(o, val))
 
-        function $(esc(ps))(o::Opt, val::$Tg)
-            ret = ccall(
-                ($(qsym("nlopt_set_", p)), libnlopt),
-                Result,
-                (_Opt, $T),
-                o,
-                val,
-            )
-            return chk(o, ret)
-        end
-    end
-end
+ftol_abs(o::Opt) = nlopt_get_ftol_abs(o)
+ftol_abs!(o::Opt, val::Real) = chk(o, nlopt_set_ftol_abs(o, val))
 
-# Vector{Cdouble} parameters p
-macro GETSET_VEC(p)
-    ps = Symbol(string(p, "!"))
-    quote
-        function $(esc(p))(o::Opt, v::Vector{Cdouble})
-            if length(v) != ndims(o)
-                throw(BoundsError())
-            end
-            ret = ccall(
-                ($(qsym("nlopt_get_", p)), libnlopt),
-                Result,
-                (_Opt, Ptr{Cdouble}),
-                o,
-                v,
-            )
-            chk(o, ret)
-            return v
-        end
+xtol_rel(o::Opt) = nlopt_get_xtol_rel(o)
+xtol_rel!(o::Opt, val::Real) = chk(o, nlopt_set_xtol_rel(o, val))
 
-        $(esc(p))(o::Opt) = $(esc(p))(o, Array{Cdouble}(undef, ndims(o)))
+maxeval(o::Opt) = nlopt_get_maxeval(o)
+maxeval!(o::Opt, val::Integer) = chk(o, nlopt_set_maxeval(o, val))
 
-        function $(esc(ps))(o::Opt, v::Vector{Cdouble})
-            if length(v) != ndims(o)
-                throw(BoundsError())
-            end
-            ret = ccall(
-                ($(qsym("nlopt_set_", p)), libnlopt),
-                Result,
-                (_Opt, Ptr{Cdouble}),
-                o,
-                v,
-            )
-            return chk(o, ret)
-        end
+maxtime(o::Opt) = nlopt_get_maxtime(o)
+maxtime!(o::Opt, val::Real) = chk(o, nlopt_set_maxtime(o, val))
 
-        function $(esc(ps))(o::Opt, v::AbstractVector{<:Real})
-            return $(esc(ps))(o, Array{Cdouble}(v))
-        end
+force_stop(o::Opt) = nlopt_get_force_stop(o)
+force_stop!(o::Opt, val::Integer) = chk(o, nlopt_set_force_stop(o, val))
+force_stop!(o::Opt) = force_stop!(o, 1)
 
-        function $(esc(ps))(o::Opt, val::Real)
-            ret = ccall(
-                ($(qsym("nlopt_set_", p, "1")), libnlopt),
-                Result,
-                (_Opt, Cdouble),
-                o,
-                val,
-            )
-            return chk(o, ret)
-        end
-    end
-end
+population(o::Opt) = nlopt_get_population(o)
+population!(o::Opt, val::Integer) = chk(o, nlopt_set_population(o, val))
+
+vector_storage(o::Opt) = nlopt_get_vector_storage(o)
+vector_storage!(o::Opt, val::Integer) = chk(o, nlopt_set_vector_storage(o, val))
 
 ############################################################################
 # Optimizer parameters
 
-@GETSET_VEC lower_bounds
-@GETSET_VEC upper_bounds
-@GETSET Cdouble stopval
-@GETSET Cdouble ftol_rel
-@GETSET Cdouble ftol_abs
-@GETSET Cdouble xtol_rel
-@GETSET_VEC xtol_abs
-@GETSET Cint maxeval
-@GETSET Cdouble maxtime
-@GETSET Cint force_stop
-@GETSET Cuint population
-@GETSET Cuint vector_storage
+function lower_bounds(
+    o::Opt,
+    v::Vector{Cdouble} = Array{Cdouble}(undef, ndims(o)),
+)
+    if length(v) != ndims(o)
+        throw(BoundsError())
+    end
+    chk(o, nlopt_get_lower_bounds(o, v))
+    return v
+end
 
-force_stop!(o::Opt) = force_stop!(o, 1)
+function lower_bounds!(o::Opt, v::Vector{Cdouble})
+    if length(v) != ndims(o)
+        throw(BoundsError())
+    end
+    return chk(o, nlopt_set_lower_bounds(o, v))
+end
+
+function lower_bounds!(o::Opt, v::AbstractVector{<:Real})
+    return lower_bounds!(o, Array{Cdouble}(v))
+end
+
+lower_bounds!(o::Opt, val::Real) = chk(o, nlopt_set_lower_bounds1(o, val))
+
+function upper_bounds(
+    o::Opt,
+    v::Vector{Cdouble} = Array{Cdouble}(undef, ndims(o)),
+)
+    if length(v) != ndims(o)
+        throw(BoundsError())
+    end
+    chk(o, nlopt_get_upper_bounds(o, v))
+    return v
+end
+
+function upper_bounds!(o::Opt, v::Vector{Cdouble})
+    if length(v) != ndims(o)
+        throw(BoundsError())
+    end
+    return chk(o, nlopt_set_upper_bounds(o, v))
+end
+
+function upper_bounds!(o::Opt, v::AbstractVector{<:Real})
+    return upper_bounds!(o, Array{Cdouble}(v))
+end
+
+upper_bounds!(o::Opt, val::Real) = chk(o, nlopt_set_upper_bounds1(o, val))
+
+function xtol_abs(o::Opt, v::Vector{Cdouble} = Array{Cdouble}(undef, ndims(o)))
+    if length(v) != ndims(o)
+        throw(BoundsError())
+    end
+    chk(o, nlopt_get_xtol_abs(o, v))
+    return v
+end
+
+function xtol_abs!(o::Opt, v::Vector{Cdouble})
+    if length(v) != ndims(o)
+        throw(BoundsError())
+    end
+    return chk(o, nlopt_set_xtol_abs(o, v))
+end
+
+function xtol_abs!(o::Opt, v::AbstractVector{<:Real})
+    return xtol_abs!(o, Array{Cdouble}(v))
+end
+
+xtol_abs!(o::Opt, val::Real) = chk(o, nlopt_set_xtol_abs1(o, val))
 
 function local_optimizer!(o::Opt, lo::Opt)
-    ret = ccall(
-        (:nlopt_set_local_optimizer, libnlopt),
-        Result,
-        (_Opt, _Opt),
-        o,
-        lo,
-    )
+    ret = nlopt_set_local_optimizer(o, lo)
     return chk(o, ret)
 end
 
@@ -405,13 +360,7 @@ function default_initial_step!(o::Opt, x::Vector{Cdouble})
     if length(x) != ndims(o)
         throw(BoundsError())
     end
-    ret = ccall(
-        (:nlopt_set_default_initial_step, libnlopt),
-        Result,
-        (_Opt, Ptr{Cdouble}),
-        o,
-        x,
-    )
+    ret = nlopt_set_default_initial_step(o, x)
     return chk(o, ret)
 end
 
@@ -423,13 +372,7 @@ function initial_step!(o::Opt, dx::Vector{Cdouble})
     if length(dx) != ndims(o)
         throw(BoundsError())
     end
-    ret = ccall(
-        (:nlopt_set_initial_step, libnlopt),
-        Result,
-        (_Opt, Ptr{Cdouble}),
-        o,
-        dx,
-    )
+    ret = nlopt_set_initial_step(o, dx)
     return chk(o, ret)
 end
 
@@ -438,13 +381,7 @@ function initial_step!(o::Opt, dx::AbstractVector{<:Real})
 end
 
 function initial_step!(o::Opt, dx::Real)
-    ret = ccall(
-        (:nlopt_set_initial_step1, libnlopt),
-        Result,
-        (_Opt, Cdouble),
-        o,
-        dx,
-    )
+    ret = nlopt_set_initial_step1(o, dx)
     return chk(o, ret)
 end
 
@@ -452,14 +389,7 @@ function initial_step(o::Opt, x::Vector{Cdouble}, dx::Vector{Cdouble})
     if length(x) != ndims(o) || length(dx) != ndims(o)
         throw(BoundsError())
     end
-    ret = ccall(
-        (:nlopt_get_initial_step, libnlopt),
-        Result,
-        (_Opt, Ptr{Cdouble}, Ptr{Cdouble}),
-        o,
-        x,
-        dx,
-    )
+    ret::Result = nlopt_get_initial_step(o, x, dx)
     chk(o, ret)
     return dx
 end
@@ -471,7 +401,7 @@ end
 ############################################################################
 
 function algorithm_name(a::Algorithm)
-    s = ccall((:nlopt_algorithm_name, libnlopt), Ptr{UInt8}, (Algorithm,), a)
+    s = nlopt_algorithm_name(a)
     if s == C_NULL
         throw(ArgumentError("invalid algorithm $a"))
     end
@@ -487,20 +417,13 @@ function Base.show(io::IO, ::MIME"text/plain", a::Algorithm)
     return print(io, ": ", algorithm_name(a))
 end
 
-numevals(o::Opt) = ccall((:nlopt_get_numevals, libnlopt), Cint, (_Opt,), o)
+numevals(o::Opt) = nlopt_get_numevals(o)
 
 ############################################################################
 
 function version()
     major, minor, patch = Ref{Cint}(), Ref{Cint}(), Ref{Cint}()
-    ccall(
-        (:nlopt_version, libnlopt),
-        Cvoid,
-        (Ref{Cint}, Ref{Cint}, Ref{Cint}),
-        major,
-        minor,
-        patch,
-    )
+    nlopt_version(major, minor, patch)
     return VersionNumber(major[], minor[], patch[])
 end
 
@@ -508,9 +431,9 @@ const NLOPT_VERSION = version()
 
 ############################################################################
 
-srand(seed::Integer) = ccall((:nlopt_srand, libnlopt), Cvoid, (Culong,), seed)
+srand(seed::Integer) = nlopt_srand(seed)
 
-srand_time() = ccall((:nlopt_srand_time, libnlopt), Cvoid, ())
+srand_time() = nlopt_srand_time()
 
 ############################################################################
 # Objective function:
@@ -541,68 +464,63 @@ function nlopt_callback_wrapper(
     end
 end
 
-for m in (:min, :max)
-    mf = Symbol(string(m, "_objective!"))
-    @eval function $mf(o::Opt, f::Function)
-        getfield(o, :cb)[1] = Callback_Data(f, o)
-        nlopt_callback_wrapper_ptr = @cfunction(
-            nlopt_callback_wrapper,
-            Cdouble,
-            (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid})
-        )
-        ret = ccall(
-            ($(qsym("nlopt_set_", m, "_objective")), libnlopt),
-            Result,
-            (_Opt, Ptr{Cvoid}, Any),
-            o,
-            nlopt_callback_wrapper_ptr,
-            getfield(o, :cb)[1],
-        )
-        return chk(o, ret)
-    end
+function min_objective!(o::Opt, f::Function)
+    cb = Callback_Data(f, o)
+    getfield(o, :cb)[1] = cb
+    c_fn = @cfunction(
+        nlopt_callback_wrapper,
+        Cdouble,
+        (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid})
+    )
+    ret = nlopt_set_min_objective(o, c_fn, cb)
+    return chk(o, ret)
+end
+
+function max_objective!(o::Opt, f::Function)
+    cb = Callback_Data(f, o)
+    getfield(o, :cb)[1] = cb
+    c_fn = @cfunction(
+        nlopt_callback_wrapper,
+        Cdouble,
+        (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid})
+    )
+    ret = nlopt_set_max_objective(o, c_fn, cb)
+    return chk(o, ret)
 end
 
 ############################################################################
 # Nonlinear constraints:
 
-for c in (:inequality, :equality)
-    cf = Symbol(string(c, "_constraint!"))
-    @eval function $cf(o::Opt, f::Function, tol::Real = 0.0)
-        push!(getfield(o, :cb), Callback_Data(f, o))
-        nlopt_callback_wrapper_ptr = @cfunction(
-            nlopt_callback_wrapper,
-            Cdouble,
-            (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid})
-        )
-        ret = ccall(
-            ($(qsym("nlopt_add_", c, "_constraint")), libnlopt),
-            Result,
-            (_Opt, Ptr{Cvoid}, Any, Cdouble),
-            o,
-            nlopt_callback_wrapper_ptr,
-            getfield(o, :cb)[end],
-            tol,
-        )
-        return chk(o, ret)
-    end
+function inequality_constraint!(o::Opt, f::Function, tol::Real = 0.0)
+    cb = Callback_Data(f, o)
+    push!(getfield(o, :cb), cb)
+    c_fn = @cfunction(
+        nlopt_callback_wrapper,
+        Cdouble,
+        (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid})
+    )
+    ret::Result = nlopt_add_inequality_constraint(o, c_fn, cb, tol)
+    return chk(o, ret)
+end
+
+function equality_constraint!(o::Opt, f::Function, tol::Real = 0.0)
+    cb = Callback_Data(f, o)
+    push!(getfield(o, :cb), cb)
+    c_fn = @cfunction(
+        nlopt_callback_wrapper,
+        Cdouble,
+        (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid})
+    )
+    ret::Result = nlopt_add_equality_constraint(o, c_fn, cb, tol)
+    return chk(o, ret)
 end
 
 function remove_constraints!(o::Opt)
     resize!(getfield(o, :cb), 1)
-    ret = ccall(
-        (:nlopt_remove_inequality_constraints, libnlopt),
-        Result,
-        (_Opt,),
-        o,
-    )
+    ret = nlopt_remove_inequality_constraints(o)
     chk(o, ret)
     # TODO(odow): why is this called twice?
-    ret = ccall(
-        (:nlopt_remove_equality_constraints, libnlopt),
-        Result,
-        (_Opt,),
-        o,
-    )
+    ret = nlopt_remove_equality_constraints(o)
     return chk(o, ret)
 end
 
@@ -638,40 +556,54 @@ function nlopt_vcallback_wrapper(
     return nothing
 end
 
-for c in (:inequality, :equality)
-    cf = Symbol(string(c, "_constraint!"))
-    @eval begin
-        function $cf(o::Opt, f::Function, tol::Vector{Cdouble})
-            push!(getfield(o, :cb), Callback_Data(f, o))
-            nlopt_vcallback_wrapper_ptr = @cfunction(
-                nlopt_vcallback_wrapper,
-                Cvoid,
-                (
-                    Cuint,
-                    Ptr{Cdouble},
-                    Cuint,
-                    Ptr{Cdouble},
-                    Ptr{Cdouble},
-                    Ptr{Cvoid},
-                )
-            )
-            ret = ccall(
-                ($(qsym("nlopt_add_", c, "_mconstraint")), libnlopt),
-                Result,
-                (_Opt, Cuint, Ptr{Cvoid}, Any, Ptr{Cdouble}),
-                o,
-                length(tol),
-                nlopt_vcallback_wrapper_ptr,
-                getfield(o, :cb)[end],
-                tol,
-            )
-            return chk(o, ret)
-        end
-        $cf(o::Opt, f::Function, tol::AbstractVector{<:Real}) =
-            $cf(o, f, Array{Float64}(tol))
-        $cf(o::Opt, m::Integer, f::Function, tol::Real = 0.0) =
-            $cf(o, f, fill(Cdouble(tol), m))
-    end
+function inequality_constraint!(o::Opt, f::Function, tol::Vector{Cdouble})
+    cb = Callback_Data(f, o)
+    push!(getfield(o, :cb), cb)
+    c_fn = @cfunction(
+        nlopt_vcallback_wrapper,
+        Cvoid,
+        (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}),
+    )
+    ret::Result =
+        nlopt_add_inequality_mconstraint(o, length(tol), c_fn, cb, tol)
+    return chk(o, ret)
+end
+
+function inequality_constraint!(
+    o::Opt,
+    f::Function,
+    tol::AbstractVector{<:Real},
+)
+    return inequality_constraint!(o, f, Array{Float64}(tol))
+end
+
+function inequality_constraint!(
+    o::Opt,
+    m::Integer,
+    f::Function,
+    tol::Real = 0.0,
+)
+    return inequality_constraint!(o, f, fill(Cdouble(tol), m))
+end
+
+function equality_constraint!(o::Opt, f::Function, tol::Vector{Cdouble})
+    cb = Callback_Data(f, o)
+    push!(getfield(o, :cb), cb)
+    c_fn = @cfunction(
+        nlopt_vcallback_wrapper,
+        Cvoid,
+        (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}),
+    )
+    ret::Result = nlopt_add_equality_mconstraint(o, length(tol), c_fn, cb, tol)
+    return chk(o, ret)
+end
+
+function equality_constraint!(o::Opt, f::Function, tol::AbstractVector{<:Real})
+    return equality_constraint!(o, f, Array{Float64}(tol))
+end
+
+function equality_constraint!(o::Opt, m::Integer, f::Function, tol::Real = 0.0)
+    return equality_constraint!(o, f, fill(Cdouble(tol), m))
 end
 
 ############################################################################
@@ -688,48 +620,23 @@ struct OptParams <: AbstractDict{String,Float64}
     o::Opt
 end
 
-function Base.length(p::OptParams)
-    return Int(ccall(("nlopt_num_params", libnlopt), Cuint, (_Opt,), p.o))
-end
+Base.length(p::OptParams)::Int = nlopt_num_params(p.o)
 
-function Base.haskey(p::OptParams, s::AbstractString)
-    return Bool(
-        ccall(("nlopt_has_param", libnlopt), Cint, (_Opt, Cstring), p.o, s),
-    )
-end
+Base.haskey(p::OptParams, s::AbstractString)::Bool = nlopt_has_param(p.o, s)
 
 function Base.get(p::OptParams, s::AbstractString, defaultval::Float64)
-    return ccall(
-        ("nlopt_get_param", libnlopt),
-        Cdouble,
-        (_Opt, Cstring, Cdouble),
-        p.o,
-        s,
-        defaultval,
-    )
+    return nlopt_get_param(p.o, s, defaultval)
 end
 
 function Base.get(p::OptParams, s::AbstractString, defaultval)
-    return haskey(p, s) ?
-           ccall(
-        ("nlopt_get_param", libnlopt),
-        Cdouble,
-        (_Opt, Cstring, Cdouble),
-        p.o,
-        s,
-        NaN,
-    ) : defaultval
+    if !haskey(p, s)
+        return defaultval
+    end
+    return nlopt_get_param(p.o, s, NaN)
 end
 
 function Base.setindex!(p::OptParams, v::Real, s::AbstractString)
-    ret = ccall(
-        ("nlopt_set_param", libnlopt),
-        Result,
-        (_Opt, Cstring, Cdouble),
-        p.o,
-        s,
-        v,
-    )
+    ret = nlopt_set_param(p.o, s, v)
     return chk(p.o, ret)
 end
 
@@ -741,13 +648,7 @@ function Base.iterate(p::OptParams, state = 0)
     if state ≥ length(p)
         return nothing
     end
-    name_ptr = ccall(
-        ("nlopt_nth_param", libnlopt),
-        Ptr{UInt8},
-        (_Opt, Cuint),
-        p.o,
-        state,
-    )
+    name_ptr = nlopt_nth_param(p.o, state)
     @assert name_ptr != C_NULL
     name = unsafe_string(name_ptr)
     return (name => p[name], state + 1)
@@ -882,14 +783,7 @@ function optimize!(o::Opt, x::Vector{Cdouble})
         throw(BoundsError())
     end
     opt_f = Array{Cdouble}(undef, 1)
-    ret = ccall(
-        (:nlopt_optimize, libnlopt),
-        Result,
-        (_Opt, Ptr{Cdouble}, Ptr{Cdouble}),
-        o,
-        x,
-        opt_f,
-    )
+    ret::Result = nlopt_optimize(o, x, opt_f)
     # We do not need to check the value of `ret`, except if it is a FORCED_STOP
     # with a Julia-related exception from a callback
     if ret == FORCED_STOP
@@ -906,6 +800,49 @@ end
 function optimize(o::Opt, x::AbstractVector{<:Real})
     return optimize!(o, copyto!(Array{Cdouble}(undef, length(x)), x))
 end
+
+export Opt,
+    NLOPT_VERSION,
+    algorithm,
+    algorithm_name,
+    ForcedStop,
+    lower_bounds!,
+    lower_bounds,
+    upper_bounds!,
+    upper_bounds,
+    stopval!,
+    stopval,
+    ftol_rel!,
+    ftol_rel,
+    ftol_abs!,
+    ftol_abs,
+    xtol_rel!,
+    xtol_rel,
+    xtol_abs!,
+    xtol_abs,
+    maxeval!,
+    maxeval,
+    maxtime!,
+    maxtime,
+    force_stop!,
+    force_stop,
+    population!,
+    population,
+    vector_storage!,
+    vector_storage,
+    initial_step!,
+    initial_step,
+    default_initial_step!,
+    local_optimizer!,
+    min_objective!,
+    max_objective!,
+    equality_constraint!,
+    inequality_constraint!,
+    remove_constraints!,
+    optimize!,
+    optimize,
+    Algorithm,
+    Result
 
 @static if !isdefined(Base, :get_extension)
     include("../ext/NLoptMathOptInterfaceExt.jl")
