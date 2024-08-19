@@ -63,12 +63,12 @@ end
 Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
 Base.convert(::Type{Algorithm}, r::nlopt_algorithm) = Algorithm(Int(r))
 
-function Algorithm(name::Symbol)
+function Algorithm(name::Symbol)::Algorithm
     algorithm = nlopt_algorithm_from_string("$name")
     if UInt32(algorithm) == 0xffffffff
         throw(ArgumentError("unknown algorithm: $name"))
     end
-    return algorithm::Algorithm
+    return algorithm
 end
 
 # enum nlopt_result
