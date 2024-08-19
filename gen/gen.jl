@@ -28,6 +28,8 @@ header = """
 
 filename = joinpath(@__DIR__, "..", "src", "libnlopt.jl")
 contents = read(filename, String)
-contents = header * contents
-contents = replace(contents, "const nlopt_opt = Ptr{nlopt_opt_s}" => "const nlopt_opt = Ptr{Cvoid}")
-write(filename, contents)
+contents = replace(
+    contents,
+    "const nlopt_opt = Ptr{nlopt_opt_s}" => "const nlopt_opt = Ptr{Cvoid}",
+)
+write(filename, header * contents)

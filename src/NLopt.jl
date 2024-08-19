@@ -5,52 +5,9 @@
 
 module NLopt
 
-export Opt,
-    NLOPT_VERSION,
-    algorithm,
-    algorithm_name,
-    ForcedStop,
-    lower_bounds!,
-    lower_bounds,
-    upper_bounds!,
-    upper_bounds,
-    stopval!,
-    stopval,
-    ftol_rel!,
-    ftol_rel,
-    ftol_abs!,
-    ftol_abs,
-    xtol_rel!,
-    xtol_rel,
-    xtol_abs!,
-    xtol_abs,
-    maxeval!,
-    maxeval,
-    maxtime!,
-    maxtime,
-    force_stop!,
-    force_stop,
-    population!,
-    population,
-    vector_storage!,
-    vector_storage,
-    initial_step!,
-    initial_step,
-    default_initial_step!,
-    local_optimizer!,
-    min_objective!,
-    max_objective!,
-    equality_constraint!,
-    inequality_constraint!,
-    remove_constraints!,
-    optimize!,
-    optimize,
-    Algorithm,
-    Result
+using CEnum: @cenum
+using NLopt_jll: libnlopt
 
-using NLopt_jll
-
-using CEnum
 include("libnlopt.jl")
 
 ############################################################################
@@ -105,14 +62,14 @@ end
 
 Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
 
-const sym2alg = Dict(Symbol(i) => i for i in instances(Algorithm))
+const _SYMBOL_TO_ALGORITHM = Dict(Symbol(i) => i for i in instances(Algorithm))
 
 function Algorithm(name::Symbol)
-    alg = get(sym2alg, name, nothing)
-    if alg === nothing
+    algorithm = get(_SYMBOL_TO_ALGORITHM, name, nothing)
+    if algorithm === nothing
         throw(ArgumentError("unknown algorithm $name"))
     end
-    return alg::Algorithm
+    return algorithm::Algorithm
 end
 
 # enum nlopt_result
@@ -852,5 +809,48 @@ else
     # without creating a new global
     global Optimizer
 end
+
+export Opt,
+    NLOPT_VERSION,
+    algorithm,
+    algorithm_name,
+    ForcedStop,
+    lower_bounds!,
+    lower_bounds,
+    upper_bounds!,
+    upper_bounds,
+    stopval!,
+    stopval,
+    ftol_rel!,
+    ftol_rel,
+    ftol_abs!,
+    ftol_abs,
+    xtol_rel!,
+    xtol_rel,
+    xtol_abs!,
+    xtol_abs,
+    maxeval!,
+    maxeval,
+    maxtime!,
+    maxtime,
+    force_stop!,
+    force_stop,
+    population!,
+    population,
+    vector_storage!,
+    vector_storage,
+    initial_step!,
+    initial_step,
+    default_initial_step!,
+    local_optimizer!,
+    min_objective!,
+    max_objective!,
+    equality_constraint!,
+    inequality_constraint!,
+    remove_constraints!,
+    optimize!,
+    optimize,
+    Algorithm,
+    Result
 
 end # module
