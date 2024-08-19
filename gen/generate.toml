@@ -1,0 +1,7 @@
+[general]
+library_name = "libnlopt"
+output_file_path = "src/libnlopt.jl"
+# print_enum_as_integer = true
+# print_using_CEnum = false
+opaque_as_mutable_struct = false
+opaque_func_arg_as_PtrCvoid = true
