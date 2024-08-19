@@ -61,6 +61,7 @@ include("libnlopt.jl")
 end
 
 Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
+Base.convert(::Type{Algorithm}, r::nlopt_algorithm) = Algorithm(Int(r))
 
 const _SYMBOL_TO_ALGORITHM = Dict(Symbol(i) => i for i in instances(Algorithm))
 
