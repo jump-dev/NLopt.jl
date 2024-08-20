@@ -791,7 +791,8 @@ function MOI.optimize!(model::Optimizer)
         if local_optimizer isa Symbol
             local_optimizer = NLopt.Opt(local_optimizer, num_variables)
         else
-            local_optimizer = NLopt.Opt(local_optimizer.algorithm, num_variables)
+            local_optimizer =
+                NLopt.Opt(local_optimizer.algorithm, num_variables)
         end
         NLopt.local_optimizer!(model.inner, local_optimizer)
     end
