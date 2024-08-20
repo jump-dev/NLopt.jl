@@ -344,14 +344,14 @@ ftol_abs!(opt::Opt, value)
 Absolute tolerance on function value. (Defaults to `0`.)
 
 ```julia
-xtol_rel(::Opt)
-xtol_rel!(::Opt, value)
+xtol_rel(opt::Opt)
+xtol_rel!(opt::Opt, value)
 ```
 Relative tolerances on the optimization parameters. (Defaults to `0`.)
 
 ```julia
-xtol_abs(::Opt)
-xtol_abs!(::Opt, value)
+xtol_abs(opt::Opt)
+xtol_abs!(opt::Opt, value)
 ```
 Absolute tolerances on the optimization parameters. (Defaults to `0`.)
 
@@ -360,15 +360,15 @@ tolerance for all inputs) or a vector of length `n` (the dimension specified in
 the `Opt` constructor) to use a different tolerance for each parameter.
 
 ```julia
-maxeval(::Opt)
-maxeval!(::Opt, value)
+maxeval(opt::Opt)
+maxeval!(opt::Opt, value)
 ```
 Stop when the number of function evaluations exceeds `mev`. (0 or negative for
 no limit, which is the default.)
 
 ```julia
-maxtime(::Opt)
-maxtime!(::Opt, value)
+maxtime(opt::Opt)
+maxtime!(opt::Opt, value)
 ```
 Stop when the optimization time (in seconds) exceeds `t`. (0 or negative for no
 limit, which is the default.)
@@ -434,7 +434,7 @@ Just [as in the C API](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/#I
 you can set the initial step sizes for derivative-free optimization algorithms
 with:
 ```julia
-initial_step!(::Opt, dx::Vector)
+initial_step!(opt::Opt, dx::Vector)
 ```
 Here, `dx` is an array of the (nonzero) initial steps for each dimension, or a
 single number if you wish to use the same initial steps for all dimensions.
@@ -478,8 +478,8 @@ Just [as in the C API](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/#V
 you can get and set the number M of stored vectors for limited-memory
 quasi-Newton algorithms, via integer-valued property
 ```julia
-vector_storage(::Opt)
-vector_storage!(::Opt, value)
+vector_storage(opt::Opt)
+vector_storage!(opt::Opt, value)
 ```
 The default is `0`, in which case NLopt uses a heuristic nonzero value as
 determined by individual algorithms.
