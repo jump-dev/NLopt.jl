@@ -656,7 +656,7 @@ end
 
 function test_copy_failure()
     opt = Opt(:LD_MMA, 2)
-    opt.opt = C_NULL
+    setfield!(opt, :opt, C_NULL)
     @test_throws ErrorException("Error in nlopt_copy") copy(opt)
     return
 end
