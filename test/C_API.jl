@@ -210,7 +210,7 @@ end
 
 function test_optimize!_bounds_error()
     opt = Opt(:AUGLAG, 2)
-    @test_throws BoundsError optimize!(opt, Cdoulbe[])
+    @test_throws BoundsError optimize!(opt, Cdouble[])
     return
 end
 
@@ -329,6 +329,70 @@ function test_algorithm_name()
     sprint(show, algorithm_name(:LD_LBFGS))
     @test sprint(show, MIME("text/plain"), NLopt.LD_LBFGS) ==
           "NLopt.LD_LBFGS: Limited-memory BFGS (L-BFGS) (local, derivative-based)"
+    return
+end
+
+function test_lower_bounds()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError lower_bounds(opt, Cdouble[])
+    v = [1.0, 2.0]
+    @test lower_bounds(opt, v) === v
+    @test v == [-Inf, -Inf]
+    lower_bounds!(opt, 3)
+    @test lower_bounds(opt) == [3.0, 3.0]
+    lower_bounds!(opt, [1 // 2, 3 // 4])
+    @test lower_bounds(opt) == [0.5, 0.75]
+    return
+end
+
+function test_upper_bounds()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError upper_bounds(opt, Cdouble[])
+    v = [1.0, 2.0]
+    @test upper_bounds(opt, v) === v
+    @test v == [Inf, Inf]
+    upper_bounds!(opt, 3)
+    @test upper_bounds(opt) == [3.0, 3.0]
+    upper_bounds!(opt, [1 // 2, 3 // 4])
+    @test upper_bounds(opt) == [0.5, 0.75]
+    return
+end
+
+function test_xtol_abs()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError xtol_abs(opt, Cdouble[])
+    v = [1.0, 2.0]
+    @test xtol_abs(opt, v) === v
+    @test v == [0.0, 0.0]
+    xtol_abs!(opt, 3)
+    @test xtol_abs(opt) == [3.0, 3.0]
+    xtol_abs!(opt, [1 // 2, 3 // 4])
+    @test xtol_abs(opt) == [0.5, 0.75]
+    return
+end
+
+function test_initial_step()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError default_initial_step!(opt, Cdouble[])
+    @test_throws BoundsError initial_step!(opt, Cdouble[])
+    x = [1.0, 2.0]
+    dx = [NaN, NaN]
+    default_initial_step!(opt, [0.2, 0.4])
+    @test initial_step(opt, x, dx) == [0.2, 0.4]
+    default_initial_step!(opt, [1 // 2, 3 // 4])
+    @test initial_step(opt, x, dx) == [0.5, 0.75]
+    @test_throws BoundsError initial_step(opt, x, Cdouble[])
+    @test_throws BoundsError initial_step(opt, Cdouble[], dx)
+    default_initial_step!(opt, x)
+    @test initial_step(opt, x, dx) == [1.0, 2.0]
+    @test dx == [1.0, 2.0]
+    @test initial_step(opt, [1 // 1, 2 // 1]) == [1.0, 2.0]
+    initial_step!(opt, [0.1, 0.2])
+    @test initial_step(opt, x, dx) == [0.1, 0.2]
+    initial_step!(opt, [2 // 10, 3 // 10])
+    @test initial_step(opt, x, dx) == [0.2, 0.3]
+    initial_step!(opt, 1 // 2)
+    @test initial_step(opt, x, dx) == [0.5, 0.5]
     return
 end
 
