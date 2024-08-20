@@ -44,7 +44,7 @@ function test_issue_156_CapturedException()
     opt = Opt(:LN_SBPLX, 1)
     opt.min_objective = f
     @test_throws CapturedException optimize(opt, [0.1234])
-    @test NLopt.nlopt_exception === nothing
+    @test getfield(opt, :exception) === nothing
     try
         optimize(opt, [0.1234])
     catch e
@@ -60,7 +60,7 @@ function test_issue_156_ForcedStop()
     opt.min_objective = f
     fmin, xmin, ret = optimize(opt, [0.1234])
     @test ret == :FORCED_STOP
-    @test NLopt.nlopt_exception === nothing
+    @test getfield(opt, :exception) === nothing
     return
 end
 
@@ -70,7 +70,7 @@ function test_issue_156_no_error()
     opt.min_objective = f
     fmin, xmin, ret = optimize(opt, [0.1234])
     @test ret ∈ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED)
-    @test NLopt.nlopt_exception === nothing
+    @test getfield(opt, :exception) === nothing
     return
 end
 

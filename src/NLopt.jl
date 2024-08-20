@@ -231,8 +231,8 @@ function chk(o::Opt, result::Result)
     elseif result == OUT_OF_MEMORY
         throw(OutOfMemoryError())
     elseif result == FORCED_STOP
-        exception = o.exception
-        o.exception = nothing
+        exception = getfield(o, :exception)
+        setfield!(o, :exception, nothing)
         if exception !== nothing && !isa(exception, ForcedStop)
             throw(exception)
         end
@@ -439,9 +439,9 @@ function nlopt_callback_wrapper(
         return d.f(x, p_grad == C_NULL ? Cdouble[] : grad)
     catch e
         if e isa ForcedStop
-            d.o.exception =  e
+            setfield!(d.o, :exception, e)
         else
-            d.o.exception = CapturedException(e, catch_backtrace())
+            setfield!(d.o, :exception, CapturedException(e, catch_backtrace()))
         end
         force_stop!(d.o::Opt)
         return NaN
@@ -762,8 +762,8 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     # We do not need to check the value of `ret`, except if it is a FORCED_STOP
     # with a Julia-related exception from a callback
     if ret == FORCED_STOP
-        exception = o.exception
-        o.exception = nothing
+        exception = getfield(o, :exception)
+        setfield!(o, :exception, nothing)
         if exception !== nothing && !(exception isa ForcedStop)
             throw(exception)
         end
