@@ -376,8 +376,6 @@ function test_property_names()
     @test :params in propertynames(opt)
     @test opt.params == NLopt.OptParams(opt)
     @test_throws ErrorException("type Opt has no readable property foo") opt.foo
-
-    opt.default_initial_step = 1.0
     @test_throws(
         ErrorException("type Opt has no writable property foo"),
         setproperty!(opt, :foo, 1),
