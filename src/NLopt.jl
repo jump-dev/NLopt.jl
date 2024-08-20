@@ -119,6 +119,7 @@ mutable struct Opt
     exception::Any
 
     function Opt(p::Ptr{Cvoid})
+        @assert p != C_NULL
         opt = new(p, Array{Callback_Data}(undef, 1), nothing)
         finalizer(destroy, opt)
         return opt
@@ -130,9 +131,6 @@ function Opt(algorithm::Algorithm, n::Integer)
         throw(ArgumentError("invalid dimension $n < 0"))
     end
     p = nlopt_create(algorithm, n)
-    if p == C_NULL
-        error("Error in nlopt_create")
-    end
     return Opt(p)
 end
 
@@ -229,12 +227,6 @@ function chk(o::Opt, result::Result)
         throw(ArgumentError("invalid NLopt arguments" * _errmsg(o)))
     elseif result == OUT_OF_MEMORY
         throw(OutOfMemoryError())
-    elseif result == FORCED_STOP
-        exception = getfield(o, :exception)
-        setfield!(o, :exception, nothing)
-        if exception !== nothing && !isa(exception, ForcedStop)
-            throw(exception)
-        end
     else
         error("nlopt failure $result", _errmsg(o))
     end

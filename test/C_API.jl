@@ -79,7 +79,102 @@ function test_readme_example_vector()
     return
 end
 
-function test_readme_example_vector()
+function test_readme_example_vector_real_tol()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(ret, x::Vector, grad::Matrix)
+        if length(grad) > 0
+            grad[1, 1] = 3 * 2 * (2 * x[1] + 0)^2
+            grad[2, 1] = -1
+            grad[1, 2] = 3 * -1 * (-1 * x[1] + 1)^2
+            grad[2, 2] = -1
+        end
+        ret[1] = (2 * x[1] + 0)^3 - x[2]
+        ret[2] = (-1 * x[1] + 1)^3 - x[2]
+        return
+    end
+    opt = Opt(:LD_MMA, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    tol = [1 // 1_000_000, 1 // 1_000_000]
+    inequality_constraint!(opt, my_constraint_fn, tol)
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test min_f ≈ 0.5443310477213124
+    @test min_x ≈ [0.3333333342139688, 0.29629628951338166]
+    @test ret == :XTOL_REACHED
+    return
+end
+
+function test_vector_equality_constraint_real_tol()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(ret, x::Vector, grad::Matrix)
+        if length(grad) > 0
+            grad[1, 1] = 3 * 2 * (2 * x[1] + 0)^2
+            grad[2, 1] = -1
+            grad[1, 2] = 3 * -1 * (-1 * x[1] + 1)^2
+            grad[2, 2] = -1
+        end
+        ret[1] = (2 * x[1] + 0)^3 - x[2]
+        ret[2] = (-1 * x[1] + 1)^3 - x[2]
+        return
+    end
+    opt = Opt(:LD_SLSQP, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    tol = [1 // 1_000_000, 1 // 1_000_000]
+    equality_constraint!(opt, my_constraint_fn, tol)
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test min_f ≈ 0.5443310477213124
+    @test min_x ≈ [0.3333333342139688, 0.29629628951338166]
+    @test ret == :XTOL_REACHED
+    return
+end
+
+function test_vector_equality_constraint_scalar_tol()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(ret, x::Vector, grad::Matrix)
+        if length(grad) > 0
+            grad[1, 1] = 3 * 2 * (2 * x[1] + 0)^2
+            grad[2, 1] = -1
+            grad[1, 2] = 3 * -1 * (-1 * x[1] + 1)^2
+            grad[2, 2] = -1
+        end
+        ret[1] = (2 * x[1] + 0)^3 - x[2]
+        ret[2] = (-1 * x[1] + 1)^3 - x[2]
+        return
+    end
+    opt = Opt(:LD_SLSQP, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    equality_constraint!(opt, 2, my_constraint_fn, 1 // 1_000_000)
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test min_f ≈ 0.5443310477213124
+    @test min_x ≈ [0.3333333342139688, 0.29629628951338166]
+    @test ret == :XTOL_REACHED
+    return
+end
+
+function test_vector_forced_stop()
     function my_objective_fn(x::Vector, grad::Vector)
         if length(grad) > 0
             grad[1] = 0
