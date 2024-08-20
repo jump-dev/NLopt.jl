@@ -116,8 +116,10 @@ mutable struct Opt
     # Opt so that they aren't garbage-collected.  cb[1] is the objective.
     cb::Vector{Callback_Data}
 
+    exception::Any
+
     function Opt(p::Ptr{Cvoid})
-        opt = new(p, Array{Callback_Data}(undef, 1))
+        opt = new(p, Array{Callback_Data}(undef, 1), nothing)
         finalizer(destroy, opt)
         return opt
     end
@@ -205,9 +207,6 @@ end
 
 struct ForcedStop <: Exception end
 
-# cache current exception for forced stop
-global nlopt_exception = nothing
-
 function errmsg(o::Opt)
     msg = nlopt_get_errmsg(o)
     return msg == C_NULL ? nothing : unsafe_string(msg)
@@ -232,11 +231,10 @@ function chk(o::Opt, result::Result)
     elseif result == OUT_OF_MEMORY
         throw(OutOfMemoryError())
     elseif result == FORCED_STOP
-        global nlopt_exception
-        e = nlopt_exception
-        nlopt_exception = nothing
-        if e !== nothing && !isa(e, ForcedStop)
-            throw(e)
+        exception = getfield(o, :exception)
+        setfield!(o, :exception, nothing)
+        if exception !== nothing && !isa(exception, ForcedStop)
+            throw(exception)
         end
     else
         error("nlopt failure $result", _errmsg(o))
@@ -440,9 +438,9 @@ function nlopt_callback_wrapper(
         return d.f(x, p_grad == C_NULL ? Cdouble[] : grad)
     catch e
         if e isa ForcedStop
-            global nlopt_exception = e
+            setfield!(d.o, :exception, e)
         else
-            global nlopt_exception = CapturedException(e, catch_backtrace())
+            setfield!(d.o, :exception, CapturedException(e, catch_backtrace()))
         end
         force_stop!(d.o::Opt)
         return NaN
@@ -524,9 +522,9 @@ function nlopt_vcallback_wrapper(
         d.f(res, x, grad)
     catch e
         if e isa ForcedStop
-            global nlopt_exception = e
+            d.o.exception = e
         else
-            global nlopt_exception = CapturedException(e, catch_backtrace())
+            d.o.exception = CapturedException(e, catch_backtrace())
         end
         force_stop!(d.o::Opt)
     end
@@ -763,11 +761,10 @@ function optimize!(o::Opt, x::Vector{Cdouble})
     # We do not need to check the value of `ret`, except if it is a FORCED_STOP
     # with a Julia-related exception from a callback
     if ret == FORCED_STOP
-        global nlopt_exception
-        e = nlopt_exception
-        nlopt_exception = nothing
-        if e !== nothing && !(e isa ForcedStop)
-            throw(e)
+        exception = getfield(o, :exception)
+        setfield!(o, :exception, nothing)
+        if exception !== nothing && !(exception isa ForcedStop)
+            throw(exception)
         end
     end
     return opt_f[], x, Symbol(ret)
