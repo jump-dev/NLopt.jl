@@ -219,7 +219,6 @@ end
 
 # check result and throw an exception if necessary
 chk(o::Opt, result::nlopt_result) = chk(o, convert(Result, result))
-chk(o::Opt, result::Integer) = chk(o, Result(result))
 
 function chk(o::Opt, result::Result)
     if result >= 0
@@ -437,14 +436,9 @@ function nlopt_callback_wrapper(
     try
         return d.f(x, p_grad == C_NULL ? Cdouble[] : grad)
     catch e
-        if e isa ForcedStop
-            setfield!(d.o, :exception, e)
-        else
-            setfield!(d.o, :exception, CapturedException(e, catch_backtrace()))
-        end
-        force_stop!(d.o::Opt)
-        return NaN
+        _catch_forced_stop(d.o, e)
     end
+    return NaN
 end
 
 function min_objective!(o::Opt, f::Function)
@@ -521,13 +515,18 @@ function nlopt_vcallback_wrapper(
     try
         d.f(res, x, grad)
     catch e
-        if e isa ForcedStop
-            d.o.exception = e
-        else
-            d.o.exception = CapturedException(e, catch_backtrace())
-        end
-        force_stop!(d.o::Opt)
+        _catch_forced_stop(d.o, e)
     end
+    return
+end
+
+function _catch_forced_stop(o::Opt, e)
+    if e isa ForcedStop
+        setfield!(o, :exception, e)
+    else
+        setfield!(o, :exception, CapturedException(e, catch_backtrace()))
+    end
+    force_stop!(o)
     return
 end
 
