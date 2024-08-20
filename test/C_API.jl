@@ -20,6 +20,129 @@ function runtests()
     return
 end
 
+function test_readme_example()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(x::Vector, grad::Vector, a, b)
+        if length(grad) > 0
+            grad[1] = 3 * a * (a * x[1] + b)^2
+            grad[2] = -1
+        end
+        return (a * x[1] + b)^3 - x[2]
+    end
+    opt = Opt(:LD_MMA, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    inequality_constraint!(opt, (x, g) -> my_constraint_fn(x, g, 2, 0), 1e-8)
+    inequality_constraint!(opt, (x, g) -> my_constraint_fn(x, g, -1, 1), 1e-8)
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test min_f ≈ 0.5443310477213124
+    @test min_x ≈ [0.3333333342139688, 0.29629628951338166]
+    @test ret == :XTOL_REACHED
+    return
+end
+
+function test_readme_example_vector()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(ret, x::Vector, grad::Matrix)
+        if length(grad) > 0
+            grad[1, 1] = 3 * 2 * (2 * x[1] + 0)^2
+            grad[2, 1] = -1
+            grad[1, 2] = 3 * -1 * (-1 * x[1] + 1)^2
+            grad[2, 2] = -1
+        end
+        ret[1] = (2 * x[1] + 0)^3 - x[2]
+        ret[2] = (-1 * x[1] + 1)^3 - x[2]
+        return
+    end
+    opt = Opt(:LD_MMA, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    inequality_constraint!(opt, my_constraint_fn, [1e-8, 1e-8])
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test min_f ≈ 0.5443310477213124
+    @test min_x ≈ [0.3333333342139688, 0.29629628951338166]
+    @test ret == :XTOL_REACHED
+    return
+end
+
+function test_readme_example_vector()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(ret, x::Vector, grad::Matrix)
+        throw(NLopt.ForcedStop())
+        return
+    end
+    opt = Opt(:LD_MMA, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    inequality_constraint!(opt, my_constraint_fn, [1e-8, 1e-8])
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test ret == :FORCED_STOP
+    return
+end
+
+function test_max_objective()
+    opt = Opt(:LD_MMA, 2)
+    function objective_fn(x, grad)
+        if length(grad) > 0
+            grad[1] = -2 * (x[1] - 0.5)
+            grad[2] = -2 * (x[2] - 1)
+        end
+        return -((x[1] - 0.5)^2 + (x[2] - 1)^2)
+    end
+    xtol_abs!(opt, 1e-5)
+    lower_bounds!(opt, -1)
+    upper_bounds!(opt, 2)
+    opt.max_objective = objective_fn
+    minf, minx, ret = optimize(opt, [0.0, 0.0])
+    @test ≈(minx, [0.5, 1.0]; atol = 1e-4)
+    max_objective!(opt, objective_fn)
+    minf, minx, ret = optimize(opt, [0.0, 0.0])
+    @test ≈(minx, [0.5, 1.0]; atol = 1e-4)
+    return
+end
+
+function test_min_objective()
+    opt = Opt(:LD_MMA, 2)
+    function objective_fn(x, grad)
+        if length(grad) > 0
+            grad[1] = 2 * (x[1] - 0.5)
+            grad[2] = 2 * (x[2] - 1)
+        end
+        return (x[1] - 0.5)^2 + (x[2] - 1)^2
+    end
+    xtol_abs!(opt, 1e-5)
+    lower_bounds!(opt, -1)
+    upper_bounds!(opt, 2)
+    opt.min_objective = objective_fn
+    minf, minx, ret = optimize(opt, [0.0, 0.0])
+    @test ≈(minx, [0.5, 1.0]; atol = 1e-4)
+    min_objective!(opt, objective_fn)
+    minf, minx, ret = optimize(opt, [0.0, 0.0])
+    @test ≈(minx, [0.5, 1.0]; atol = 1e-4)
+    return
+end
+
 function test_issue_163()
     opt = Opt(:LN_COBYLA, 2)
     opt.min_objective = (x, g) -> sum(x .^ 2)
@@ -253,6 +376,10 @@ function test_property_names()
     @test :params in propertynames(opt)
     @test opt.params == NLopt.OptParams(opt)
     @test_throws ErrorException("type Opt has no readable property foo") opt.foo
+    @test_throws(
+        ErrorException("type Opt has no writable property foo"),
+        setproperty!(opt, :foo, 1),
+    )
     return
 end
 
@@ -335,6 +462,7 @@ end
 function test_lower_bounds()
     opt = Opt(:LD_LBFGS, 2)
     @test_throws BoundsError lower_bounds(opt, Cdouble[])
+    @test_throws BoundsError lower_bounds!(opt, Cdouble[])
     v = [1.0, 2.0]
     @test lower_bounds(opt, v) === v
     @test v == [-Inf, -Inf]
@@ -348,6 +476,7 @@ end
 function test_upper_bounds()
     opt = Opt(:LD_LBFGS, 2)
     @test_throws BoundsError upper_bounds(opt, Cdouble[])
+    @test_throws BoundsError upper_bounds!(opt, Cdouble[])
     v = [1.0, 2.0]
     @test upper_bounds(opt, v) === v
     @test v == [Inf, Inf]
@@ -361,6 +490,7 @@ end
 function test_xtol_abs()
     opt = Opt(:LD_LBFGS, 2)
     @test_throws BoundsError xtol_abs(opt, Cdouble[])
+    @test_throws BoundsError xtol_abs!(opt, Cdouble[])
     v = [1.0, 2.0]
     @test xtol_abs(opt, v) === v
     @test v == [0.0, 0.0]
@@ -379,6 +509,8 @@ function test_initial_step()
     dx = [NaN, NaN]
     default_initial_step!(opt, [0.2, 0.4])
     @test initial_step(opt, x, dx) == [0.2, 0.4]
+    opt.default_initial_step = [0.25, 0.45]
+    @test initial_step(opt, x, dx) == [0.25, 0.45]
     default_initial_step!(opt, [1 // 2, 3 // 4])
     @test initial_step(opt, x, dx) == [0.5, 0.75]
     @test_throws BoundsError initial_step(opt, x, Cdouble[])
@@ -389,6 +521,8 @@ function test_initial_step()
     @test initial_step(opt, [1 // 1, 2 // 1]) == [1.0, 2.0]
     initial_step!(opt, [0.1, 0.2])
     @test initial_step(opt, x, dx) == [0.1, 0.2]
+    opt.initial_step = [0.15, 0.25]
+    @test initial_step(opt, x, dx) == [0.15, 0.25]
     initial_step!(opt, [2 // 10, 3 // 10])
     @test initial_step(opt, x, dx) == [0.2, 0.3]
     initial_step!(opt, 1 // 2)
