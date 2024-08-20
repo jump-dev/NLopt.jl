@@ -391,11 +391,10 @@ end
 ############################################################################
 
 function algorithm_name(a::Algorithm)
-    s = nlopt_algorithm_name(a)
-    if s == C_NULL
-        throw(ArgumentError("invalid algorithm $a"))
-    end
-    return unsafe_string(s)
+    p = nlopt_algorithm_name(a)
+    # pointer cannot be C_NULL because we are using only valid Enums
+    @assert p !== C_NULL
+    return unsafe_string(p)
 end
 
 algorithm_name(a::Union{Integer,Symbol}) = algorithm_name(Algorithm(a))
