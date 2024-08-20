@@ -153,9 +153,6 @@ Base.show(io::IO, o::Opt) = print(io, "Opt($(algorithm(o)), $(ndims(o)))")
 # Callback_Data.
 
 function munge_callback(p::Ptr{Cvoid}, p_user_data::Ptr{Cvoid})
-    if p == C_NULL
-        return C_NULL
-    end
     old_to_new_pointer_map =
         unsafe_pointer_to_objref(p_user_data)::Dict{Ptr{Cvoid},Ptr{Cvoid}}
     return old_to_new_pointer_map[p]
@@ -170,7 +167,7 @@ function Base.copy(opt::Opt)
     opt_callbacks = getfield(opt, :cb)
     new_callbacks = Vector{Callback_Data}(undef, length(opt_callbacks))
     setfield!(new_opt, :cb, new_callbacks)
-    old_to_new_pointer_map = Dict{Ptr{Cvoid},Ptr{Cvoid}}()
+    old_to_new_pointer_map = Dict{Ptr{Cvoid},Ptr{Cvoid}}(C_NULL => C_NULL)
     for i in 1:length(opt_callbacks)
         if isassigned(opt_callbacks, i)
             new_callbacks[i] = Callback_Data(opt_callbacks[i].f, new_opt)
