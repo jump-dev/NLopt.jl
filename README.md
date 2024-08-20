@@ -1,4 +1,4 @@
-# The NLopt module for Julia
+# NLopt.jl
 
 [![Build Status](https://github.com/JuliaOpt/NLopt.jl/workflows/CI/badge.svg?branch=master)](https://github.com/JuliaOpt/NLopt.jl/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/JuliaOpt/NLopt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaOpt/NLopt.jl)
@@ -82,12 +82,6 @@ solution status       : XTOL_REACHED
 # function evaluation : 11
 ```
 
-Much like the NLopt interfaces in other languages, you create an `Opt` object
-(analogous to `nlopt_opt` in C) which encapsulates the dimensionality of your
-problem (here, 2) and the algorithm to be used (here, `LD_MMA`) and use various
-functions to specify the constraints and stopping criteria (along with any other
-aspects of the problem).
-
 ## Use with JuMP
 
 NLopt implements the [MathOptInterface interface](https://jump.dev/MathOptInterface.jl/stable/reference/nonlinear/)
@@ -101,7 +95,33 @@ You can use NLopt with JuMP as follows:
 using JuMP, NLopt
 model = Model(NLopt.Optimizer)
 set_attribute(model, "algorithm", :LD_MMA)
+set_attribute(model, "xtol_rel", 1e-4)
+set_attribute(model, "constrtol_abs", 1e-8)
+@variable(model, x[1:2])
+set_lower_bound(x[2], 0.0)
+set_start_value.(x, [1.234, 5.678])
+@NLobjective(model, Min, sqrt(x[2]))
+@NLconstraint(model, (2 * x[1] + 0)^3 - x[2] <= 0)
+@NLconstraint(model, (-1 * x[1] + 1)^3 - x[2] <= 0)
+optimize!(model)
+min_f, min_x, ret = objective_value(model), value.(x), raw_status(model)
+println(
+    """
+    objective value       : $min_f
+    solution              : $min_x
+    solution status       : $ret
+    """
+)
 ```
+
+The output is:
+
+```
+objective value       : 0.5443310477213124
+solution              : [0.3333333342139688, 0.29629628951338166]
+solution status       : XTOL_REACHED
+```
+
 
 The `algorithm` attribute is required. The value must be one of the supported
 [NLopt algorithms](https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms/).
@@ -120,7 +140,7 @@ all constraints.
 ## Reference
 
 The main purpose of this section is to document the syntax and unique features
-of the Julia interface; for more detail on the underlying features, please refer
+of the Julia interface. For more detail on the underlying features, please refer
 to the C documentation in the [NLopt Reference](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/).
 
 ### Using the Julia API
@@ -129,10 +149,10 @@ To use NLopt in Julia, your Julia program should include the line:
 ```julia
 using NLopt
 ```
-which imports the NLopt module and its symbols.  (Alternatively, you can use
+which imports the NLopt module and its symbols.  Alternatively, you can use
 `import NLopt` if you want to keep all the NLopt symbols in their own namespace.
 You would then prefix all functions below with `NLopt.`, e.g. `NLopt.Opt` and so
-on.)
+on.
 
 ### The `Opt` type
 
@@ -144,7 +164,7 @@ optimization.
 
 The object should normally be created via the constructor:
 ```julia
-opt = Opt(algorithm, n)
+opt = Opt(algorithm::Symbol, n::Int)
 ```
 given an algorithm (see [NLopt Algorithms](https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms/)
 for possible values) and the dimensionality of the problem (`n`, the number of
@@ -161,14 +181,13 @@ There is also a `copy(opt::Opt)` function to make a copy of a given object
 If there is an error in these functions, an exception is thrown.
 
 The algorithm and dimension parameters of the object are immutable (cannot be
-changed without constructing a new object), but you can query them for a given
-object by:
+changed without constructing a new object). Query them using:
 ```julia
 ndims(opt::Opt)
 algorithm(opt::Opt)
 ```
 
-You can get a string description of the algorithm via:
+Get a string description of the algorithm via:
 ```julia
 algorithm_name(opt::Opt)
 ```
@@ -181,9 +200,11 @@ min_objective!(opt::Opt, f::Function)
 max_objective!(opt::Opt, f::Function)
 ```
 depending on whether one wishes to minimize or maximize the objective function
-`f`, respectively. The function `f` must be of the form:
+`f`, respectively.
+
+The function `f` must be of the form:
 ```julia
-function f(x::Vector, grad::Vector)
+function f(x::Vector{Float64}, grad::Vector{Float64})
     if length(grad) > 0
         ...set grad to gradient, in-place...
     end
@@ -191,20 +212,18 @@ function f(x::Vector, grad::Vector)
 end
 ```
 
-The return value should be the value of the function at the point `x`, where `x`
-is a (`Float64`) array of length `n` of the optimization parameters (the same as
-the dimension passed to the `Opt` constructor).
+The return value must be the value of the function at the point `x`, where `x`
+is a `Vector{Float64}` array of length `n` of the optimization parameters.
 
 In addition, if the argument `grad` is not empty (that is, `length(grad) > 0`),
-then `grad` is a (`Float64`) array of length `n` which should (upon return) be
-set to the gradient of the function with respect to the optimization parameters
-at `x`. That is, `grad[i]` should upon return contain the partial derivative
-&part;`f`/&part;`x`<sub>`i`</sub>, for 1&le;`i`&le;`n`, if `grad` is non-empty.
+then `grad` is a `Vector{Float64}` array of length `n` which should (upon
+return) be set to the gradient of the function with respect to the optimization
+parameters at `x`.
 
 Not all of the optimization algorithms (below) use the gradient information: for
 algorithms listed as "derivative-free," the `grad` argument will always be empty
-and need never be computed. (For algorithms that do use gradient information,
-however, `grad` may still be empty for some calls.)
+and need never be computed. For algorithms that do use gradient information,
+`grad` may still be empty for some calls.
 
 Note that `grad` must be modified *in-place* by your function `f`. Generally,
 this means using indexing operations `grad[...] = ...` to overwrite the contents
@@ -214,7 +233,7 @@ explicit loop or use `grad[:] = 2x`.
 
 ### Bound constraints
 
-The bound constraints can be specified by setting one of the properties:
+Add bound constraints with:
 ```julia
 lower_bounds!(opt::Opt, lb::Union{AbstractVector,Real})
 upper_bounds!(opt::Opt, ub::Union{AbstractVector,Real})
@@ -226,7 +245,7 @@ For convenience, you can instead use a single scalar for `lb` or `ub` in order
 to set the lower/upper bounds for all optimization parameters to a single
 constant.
 
-To retrieve the values of the lower/upper bounds, you can use the properties
+To retrieve the values of the lower or upper bounds, use:
 ```julia
 lower_bounds(opt::Opt)
 upper_bounds(opt::Opt)
@@ -237,39 +256,38 @@ To specify an unbounded dimension, you can use `Inf` or `-Inf`.
 
 ### Nonlinear constraints
 
-Just as for nonlinear constraints in C, you can specify nonlinear inequality and
-equality constraints by the functions:
+Specify nonlinear inequality and equality constraints by the functions:
 ```julia
-inequality_constraint!(opt::Opt, fc::Function, tol::Real = 0.0)
-equality_constraint!(opt::Opt, h::Function, tol::Real = 0.0)
+inequality_constraint!(opt::Opt, f::Function, tol::Real = 0.0)
+equality_constraint!(opt::Opt, f::Function, tol::Real = 0.0)
 ```
+where the arguments `f` have the same form as the objective function above.
 
-where the arguments `fc` and `h` have the same form as the objective function
-above. The optional `tol` arguments specify a tolerance (which defaults to zero)
-in judging feasibility for the purposes of stopping the optimization, as in C.
+The optional `tol` arguments specify a tolerance (which defaults to zero) that
+is used to judge feasibility for the purposes of stopping the optimization.
 
 Each call to these function *adds* a new constraint to the set of constraints,
 rather than replacing the constraints.
 
-To remove all of the inequality and equality constraints from a given problem,
-call the following function:
+Remove all of the inequality and equality constraints from a given problem with:
 ```julia
 remove_constraints!(opt::Opt)
 ```
 
 ### Vector-valued constraints
 
-Just as for nonlinear constraints in C, you can specify vector-valued nonlinear
-inequality and equality constraints by the functions:
+Specify vector-valued nonlinear inequality and equality constraints by the
+functions:
 ```julia
-inequality_constraint!(opt::Opt, c::Function, tol::AbstractVector)
-equality_constraint!(opt::Opt, c::Function, tol::AbstractVector)
+inequality_constraint!(opt::Opt, f::Function, tol::AbstractVector)
+equality_constraint!(opt::Opt, f::Function, tol::AbstractVector)
 ```
-Here, `tol` is an array of the tolerances in each constraint dimension; the
-dimensionality `m` of the constraint is determined by `length(tol)`. The
-constraint function `c` must be of the form:
+where `tol` is an array of the tolerances in each constraint dimension; the
+dimensionality `m` of the constraint is determined by `length(tol)`.
+
+The constraint function `f` must be of the form:
 ```julia
-function c(result::Vector, x::Vector, grad::Matrix)
+function f(result::Vector{Float64}, x::Vector{Float64}, grad::Matrix{Float64})
     if length(grad) > 0
         ...set grad to gradient, in-place...
     end
@@ -277,27 +295,21 @@ function c(result::Vector, x::Vector, grad::Matrix)
     result[2] = ...value of c2(x)...
     return
 ```
-`result` is a (`Float64`) array whose length equals the dimensionality `m` of
-the constraint (same as the length of `tol` above), which upon return should be
-set *in-place* (see also above) to the constraint results at the point `x` (a
-`Float64` array whose length `n` is the same as the dimension passed to the
-`Opt` constructor). Any return value of the function is ignored.
+where  `result` is a `Vector{Float64}` array whose length equals the
+dimensionality `m` of the constraint (same as the length of `tol` above), which
+upon return, should be set *in-place* to the constraint results at the point `x`.
+Any return value of the function is ignored.
 
 In addition, if the argument `grad` is not empty (that is, `length(grad) > 0`),
 then `grad` is a 2d array of size `n`&times;`m` which should (upon return) be
 set in-place (see above) to the gradient of the function with respect to the
 optimization parameters at `x`. That is, `grad[j,i]` should upon return contain
-the partial derivative &part;c<sub>`i`</sub>/&part;x<sub>`j`</sub> if `grad` is
-non-empty.
+the partial derivative &part;f<sub>`i`</sub>/&part;x<sub>`j`</sub>.
 
 Not all of the optimization algorithms (below) use the gradient information: for
 algorithms listed as "derivative-free," the `grad` argument will always be empty
-and need never be computed. (For algorithms that do use gradient information,
-however, `grad` may still be empty for some calls.)
-
-An inequality constraint corresponds to c<sub>`i`</sub>&le;0 for 1&le;`i`&le;`m`,
-and an equality constraint corresponds to c<sub>i</sub>=0, in both cases with
-tolerance `tol[i]` for purposes of termination criteria.
+and need never be computed. For algorithms that do use gradient information,
+`grad` may still be empty for some calls.
 
 You can add multiple vector-valued constraints and/or scalar constraints in the
 same problem.
@@ -310,40 +322,53 @@ you have multiple options for different stopping criteria that you can specify.
 (Unspecified stopping criteria are disabled; that is, they have innocuous
 defaults.)
 
-For each stopping criteria, there is a property of the `opt::Opt` object that
-you can use to get/set the value of the stopping criterion. The meanings of each
-criterion are exactly the same as in the C API:
+For each stopping criteria, there are two functions that you can use to get and
+set the value of the stopping criterion.
 
 ```julia
-opt.stopval
+stopval(opt::Opt)          # return the current value of `stopval`
+stopval!(opt::Opt, value)  # set stopval to `value`
 ```
-Stop when an objective value of at least `stopval` is found.
-(Defaults to `-Inf`.)
+Stop when an objective value of at least `stopval` is found. (Defaults to `-Inf`.)
 
 ```julia
-opt.ftol_rel
-opt.ftol_abs
+ftol_rel(opt::Opt)
+ftol_rel!(opt::Opt, value)
 ```
-Relative or absolute tolerance on function value. (Defaults to `0`.)
+Relative tolerance on function value. (Defaults to `0`.)
 
 ```julia
-opt.xtol_rel
-opt.xtol_abs
+ftol_abs(opt::Opt)
+ftol_abs!(opt::Opt, value)
 ```
-Absolute or relative tolerances on the optimization parameters. (Both default to
-`0`.) In the case of `xtol_abs`, you can either set it to a scalar (to use the
-same tolerance for all inputs) or a vector of length `n` (the dimension
-specified in the `Opt` constructor) to use a different tolerance for each
-parameter.
+Absolute tolerance on function value. (Defaults to `0`.)
 
 ```julia
-opt.maxeval
+xtol_rel(::Opt)
+xtol_rel!(::Opt, value)
+```
+Relative tolerances on the optimization parameters. (Defaults to `0`.)
+
+```julia
+xtol_abs(::Opt)
+xtol_abs!(::Opt, value)
+```
+Absolute tolerances on the optimization parameters. (Defaults to `0`.)
+
+In the case of `xtol_abs`, you can either set it to a scalar (to use the same
+tolerance for all inputs) or a vector of length `n` (the dimension specified in
+the `Opt` constructor) to use a different tolerance for each parameter.
+
+```julia
+maxeval(::Opt)
+maxeval!(::Opt, value)
 ```
 Stop when the number of function evaluations exceeds `mev`. (0 or negative for
 no limit, which is the default.)
 
 ```julia
-opt.maxtime
+maxtime(::Opt)
+maxtime!(::Opt, value)
 ```
 Stop when the optimization time (in seconds) exceeds `t`. (0 or negative for no
 limit, which is the default.)
@@ -354,9 +379,9 @@ In certain cases, the caller may wish to force the optimization to halt, for
 some reason unknown to NLopt. For example, if the user presses Ctrl-C, or there
 is an error of some sort in the objective function. You can do this by throwing
 any exception inside your objective/constraint functions: the optimization will
-be halted gracefully, and the same exception will be thrown to the caller. See
-below regarding exceptions. The Julia equivalent of `nlopt_forced_stop`
-from the C API is to throw a `ForcedStop` exception.
+be halted gracefully, and the same exception will be thrown to the caller. The
+Julia equivalent of `nlopt_forced_stop` from the C API is to throw a `ForcedStop`
+exception.
 
 ### Performing the optimization
 
@@ -391,7 +416,7 @@ Some of the algorithms, especially `MLSL` and `AUGLAG`, use a different
 optimization algorithm as a subroutine, typically for local optimization. You
 can change the local search algorithm and its tolerances by setting:
 ```julia
-opt.local_optimizer = local_opt::Opt
+local_optimizer!(opt::Opt, local_opt::Opt)
 ```
 
 Here, `local_opt` is another `Opt` object whose parameters are used to determine
@@ -407,23 +432,23 @@ original `local_opt` afterwards without affecting `opt`.
 
 Just [as in the C API](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/#Initial_step_size),
 you can set the initial step sizes for derivative-free optimization algorithms
-via the `opt.initial_step` property:
+with:
 ```julia
-opt.initial_step = dx
+initial_step!(::Opt, dx::Vector)
 ```
 Here, `dx` is an array of the (nonzero) initial steps for each dimension, or a
 single number if you wish to use the same initial steps for all dimensions.
 
 `initial_step(opt::Opt, x::AbstractVector)` returns the initial step that will
-be used for a starting guess of `x` in `optimize(opt,x)`.
+be used for a starting guess of `x` in `optimize(opt, x)`.
 
 ### Stochastic population
 
 Just [as in the C API](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/#Stochastic_population),
-you can get and set the initial population for stochastic optimization
-algorithms by the property
+you can get and set the initial population for stochastic optimization with:
 ```julia
-opt.population
+population(opt::Opt)
+population!(opt::Opt, value)
 ```
 A `population` of zero, the default, implies that the heuristic default will be
 used as decided upon by individual algorithms.
@@ -432,6 +457,7 @@ used as decided upon by individual algorithms.
 
 For stochastic optimization algorithms, NLopt uses pseudorandom numbers
 generated by the Mersenne Twister algorithm, based on code from Makoto Matsumoto.
+
 By default, the seed for the random numbers is generated from the system time,
 so that you will get a different sequence of pseudorandom numbers each time you
 run your program. If you want to use a "deterministic" sequence of pseudorandom
@@ -452,7 +478,8 @@ Just [as in the C API](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/#V
 you can get and set the number M of stored vectors for limited-memory
 quasi-Newton algorithms, via integer-valued property
 ```julia
-opt.vector_storage
+vector_storage(::Opt)
+vector_storage!(::Opt, value)
 ```
 The default is `0`, in which case NLopt uses a heuristic nonzero value as
 determined by individual algorithms.
