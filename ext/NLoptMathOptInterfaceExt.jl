@@ -5,17 +5,15 @@
 
 module NLoptMathOptInterfaceExt
 
-using NLopt
-
-import MathOptInterface
-
-const MOI = MathOptInterface
+import MathOptInterface as MOI
+import NLopt
 
 function __init__()
     # we need to add extension types back to the toplevel module
     @static if VERSION >= v"1.9"
         setglobal!(NLopt, :Optimizer, Optimizer)
     end
+    return
 end
 
 mutable struct _ConstraintInfo{F,S}
@@ -29,7 +27,7 @@ end
 Create a new Optimizer object.
 """
 mutable struct Optimizer <: MOI.AbstractOptimizer
-    inner::Union{Opt,Nothing}
+    inner::Union{NLopt.Opt,Nothing}
     # Problem data.
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
@@ -80,7 +78,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             nothing,
             MOI.Utilities.VariablesContainer{Float64}(),
             Union{Nothing,Float64}[],
-            empty_nlp_data(),
+            _empty_nlp_data(),
             nothing,
             nothing,
             _ConstraintInfo{
@@ -100,7 +98,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
                 MOI.EqualTo{Float64},
             }[],
             false,
-            copy(DEFAULT_OPTIONS),
+            copy(_DEFAULT_OPTIONS),
             NaN,
             Float64[],
             Float64[],
@@ -113,30 +111,30 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     end
 end
 
-struct EmptyNLPEvaluator <: MOI.AbstractNLPEvaluator end
+struct _EmptyNLPEvaluator <: MOI.AbstractNLPEvaluator end
 
-MOI.features_available(::EmptyNLPEvaluator) = [:Grad, :Jac, :Hess]
+MOI.features_available(::_EmptyNLPEvaluator) = [:Grad, :Jac, :Hess]
 
-MOI.initialize(::EmptyNLPEvaluator, features) = nothing
+MOI.initialize(::_EmptyNLPEvaluator, features) = nothing
 
-MOI.eval_objective(::EmptyNLPEvaluator, x) = NaN
+MOI.eval_objective(::_EmptyNLPEvaluator, x) = NaN
 
-function MOI.eval_constraint(::EmptyNLPEvaluator, g, x)
+function MOI.eval_constraint(::_EmptyNLPEvaluator, g, x)
     @assert length(g) == 0
     return
 end
-function MOI.eval_objective_gradient(::EmptyNLPEvaluator, g, x)
+function MOI.eval_objective_gradient(::_EmptyNLPEvaluator, g, x)
     fill!(g, 0.0)
     return
 end
 
-MOI.jacobian_structure(::EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
+MOI.jacobian_structure(::_EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
 
-function MOI.eval_constraint_jacobian(::EmptyNLPEvaluator, J, x)
+function MOI.eval_constraint_jacobian(::_EmptyNLPEvaluator, J, x)
     return
 end
 
-empty_nlp_data() = MOI.NLPBlockData([], EmptyNLPEvaluator(), false)
+_empty_nlp_data() = MOI.NLPBlockData([], _EmptyNLPEvaluator(), false)
 
 # empty! and is_empty
 
@@ -144,7 +142,7 @@ function MOI.empty!(model::Optimizer)
     model.inner = nothing
     MOI.empty!(model.variables)
     empty!(model.starting_values)
-    model.nlp_data = empty_nlp_data()
+    model.nlp_data = _empty_nlp_data()
     model.sense = nothing
     model.objective = nothing
     empty!(model.linear_le_constraints)
@@ -158,7 +156,7 @@ end
 function MOI.is_empty(model::Optimizer)
     return MOI.is_empty(model.variables) &&
            isempty(model.starting_values) &&
-           model.nlp_data.evaluator isa EmptyNLPEvaluator &&
+           model.nlp_data.evaluator isa _EmptyNLPEvaluator &&
            model.sense == nothing &&
            isempty(model.linear_le_constraints) &&
            isempty(model.linear_eq_constraints) &&
@@ -323,7 +321,7 @@ end
 
 # MOI.RawOptimizerAttribute
 
-const DEFAULT_OPTIONS = Dict{String,Any}(
+const _DEFAULT_OPTIONS = Dict{String,Any}(
     "algorithm" => :none,
     "stopval" => NaN,
     "ftol_rel" => 1e-7,
@@ -341,7 +339,7 @@ const DEFAULT_OPTIONS = Dict{String,Any}(
 )
 
 function MOI.supports(::Optimizer, p::MOI.RawOptimizerAttribute)
-    return p.name in DEFAULT_OPTIONS
+    return p.name in _DEFAULT_OPTIONS
 end
 
 function MOI.set(model::Optimizer, p::MOI.RawOptimizerAttribute, value)
@@ -562,13 +560,12 @@ function MOI.add_constraint(
     return MOI.ConstraintIndex{typeof(func),typeof(set)}(length(constraints))
 end
 
-function starting_value(optimizer::Optimizer, i)
+function _starting_value(optimizer::Optimizer, i)
     if optimizer.starting_values[i] !== nothing
         return optimizer.starting_values[i]
-    else
-        v = optimizer.variables
-        return min(max(0.0, v.lower[i]), v.upper[i])
     end
+    v = optimizer.variables
+    return min(max(0.0, v.lower[i]), v.upper[i])
 end
 
 function MOI.supports(
@@ -643,7 +640,7 @@ function MOI.set(
     return
 end
 
-function eval_objective(model::Optimizer, x)
+function _eval_objective(model::Optimizer, x)
     # The order of the conditions is important. NLP objectives override regular
     # objectives.
     if model.nlp_data.has_objective
@@ -656,13 +653,13 @@ function eval_objective(model::Optimizer, x)
     end
 end
 
-function fill_gradient!(grad, x, var::MOI.VariableIndex)
+function _fill_gradient!(grad, x, var::MOI.VariableIndex)
     fill!(grad, 0.0)
     grad[var.value] = 1.0
     return
 end
 
-function fill_gradient!(grad, x, aff::MOI.ScalarAffineFunction{Float64})
+function _fill_gradient!(grad, x, aff::MOI.ScalarAffineFunction{Float64})
     fill!(grad, 0.0)
     for term in aff.terms
         grad[term.variable.value] += term.coefficient
@@ -670,7 +667,7 @@ function fill_gradient!(grad, x, aff::MOI.ScalarAffineFunction{Float64})
     return
 end
 
-function fill_gradient!(grad, x, quad::MOI.ScalarQuadraticFunction{Float64})
+function _fill_gradient!(grad, x, quad::MOI.ScalarQuadraticFunction{Float64})
     fill!(grad, 0.0)
     for term in quad.affine_terms
         grad[term.variable.value] += term.coefficient
@@ -689,18 +686,18 @@ function fill_gradient!(grad, x, quad::MOI.ScalarQuadraticFunction{Float64})
     return
 end
 
-function eval_objective_gradient(model::Optimizer, grad, x)
+function _eval_objective_gradient(model::Optimizer, grad, x)
     if model.nlp_data.has_objective
         MOI.eval_objective_gradient(model.nlp_data.evaluator, grad, x)
     elseif model.objective !== nothing
-        fill_gradient!(grad, x, model.objective)
+        _fill_gradient!(grad, x, model.objective)
     else
         fill!(grad, 0.0)
     end
     return
 end
 
-function eval_constraint(model::Optimizer, g, x)
+function _eval_constraint(model::Optimizer, g, x)
     row = 1
     for info in model.linear_le_constraints
         g[row] = eval_function(info.func, x)
@@ -723,7 +720,7 @@ function eval_constraint(model::Optimizer, g, x)
     return
 end
 
-function fill_constraint_jacobian!(
+function _fill_constraint_jacobian!(
     values,
     start_offset,
     x,
@@ -736,7 +733,7 @@ function fill_constraint_jacobian!(
     return num_coefficients
 end
 
-function fill_constraint_jacobian!(
+function _fill_constraint_jacobian!(
     values,
     start_offset,
     x,
@@ -767,96 +764,63 @@ function fill_constraint_jacobian!(
     return num_affine_coefficients + num_quadratic_coefficients
 end
 
-# Refers to local variables in eval_constraint_jacobian() below.
-macro fill_constraint_jacobian(array_name)
-    esc_offset = esc(:offset)
-    quote
-        for info in $(esc(array_name))
-            $esc_offset += fill_constraint_jacobian!(
-                $(esc(:values)),
-                $esc_offset,
-                $(esc(:x)),
-                info.func,
-            )
-        end
-    end
-end
-
-function eval_constraint_jacobian(model::Optimizer, values, x)
+function _eval_constraint_jacobian(model::Optimizer, values, x)
     offset = 0
-    @fill_constraint_jacobian model.linear_le_constraints
-    @fill_constraint_jacobian model.linear_eq_constraints
-    @fill_constraint_jacobian model.quadratic_le_constraints
-    @fill_constraint_jacobian model.quadratic_eq_constraints
+    for info_1 in model.linear_le_constraints
+        offset += _fill_constraint_jacobian!(values, offset, x, info_1.func)
+    end
+    for info_2 in model.linear_eq_constraints
+        offset += _fill_constraint_jacobian!(values, offset, x, info_2.func)
+    end
+    for info_3 in model.quadratic_le_constraints
+        offset += _fill_constraint_jacobian!(values, offset, x, info_3.func)
+    end
+    for info_4 in model.quadratic_eq_constraints
+        offset += _fill_constraint_jacobian!(values, offset, x, info_4.func)
+    end
     nlp_values = view(values, 1+offset:length(values))
     MOI.eval_constraint_jacobian(model.nlp_data.evaluator, nlp_values, x)
     return
 end
 
-function constraint_bounds(model::Optimizer)
-    constraint_lb = Float64[]
-    constraint_ub = Float64[]
-    for info in model.linear_le_constraints
-        push!(constraint_lb, -Inf)
-        push!(constraint_ub, info.set.upper)
-    end
-    for info in model.linear_eq_constraints
-        push!(constraint_lb, info.set.value)
-        push!(constraint_ub, info.set.value)
-    end
-    for info in model.quadratic_le_constraints
-        push!(constraint_lb, -Inf)
-        push!(constraint_ub, info.set.upper)
-    end
-    for info in model.quadratic_eq_constraints
-        push!(constraint_lb, info.set.value)
-        push!(constraint_ub, info.set.value)
-    end
-    for bound in model.nlp_data.constraint_bounds
-        push!(constraint_lb, bound.lower)
-        push!(constraint_ub, bound.upper)
-    end
-    return constraint_lb, constraint_ub
-end
-
 function MOI.optimize!(model::Optimizer)
     num_variables = length(model.starting_values)
-    model.inner = Opt(model.options["algorithm"], num_variables)
+    model.inner = NLopt.Opt(model.options["algorithm"], num_variables)
     local_optimizer = model.options["local_optimizer"]
     if local_optimizer !== nothing
         if local_optimizer isa Symbol
-            local_optimizer = Opt(local_optimizer, num_variables)
+            local_optimizer = NLopt.Opt(local_optimizer, num_variables)
         else
-            local_optimizer = Opt(local_optimizer.algorithm, num_variables)
+            local_optimizer = NLopt.Opt(local_optimizer.algorithm, num_variables)
         end
-        local_optimizer!(model.inner, local_optimizer)
+        NLopt.local_optimizer!(model.inner, local_optimizer)
     end
     # load parameters
-    stopval!(model.inner, model.options["stopval"])
+    NLopt.stopval!(model.inner, model.options["stopval"])
     if !isnan(model.options["ftol_rel"])
-        ftol_rel!(model.inner, model.options["ftol_rel"])
+        NLopt.ftol_rel!(model.inner, model.options["ftol_rel"])
     end
     if !isnan(model.options["ftol_abs"])
-        ftol_abs!(model.inner, model.options["ftol_abs"])
+        NLopt.ftol_abs!(model.inner, model.options["ftol_abs"])
     end
     if !isnan(model.options["xtol_rel"])
-        xtol_rel!(model.inner, model.options["xtol_rel"])
+        NLopt.xtol_rel!(model.inner, model.options["xtol_rel"])
     end
     if model.options["xtol_abs"] != nothing
-        xtol_abs!(model.inner, model.options["xtol_abs"])
+        NLopt.xtol_abs!(model.inner, model.options["xtol_abs"])
     end
-    maxeval!(model.inner, model.options["maxeval"])
-    maxtime!(model.inner, model.options["maxtime"])
+    NLopt.maxeval!(model.inner, model.options["maxeval"])
+    NLopt.maxtime!(model.inner, model.options["maxtime"])
     if model.options["initial_step"] != nothing
-        initial_step!(model.inner, model.options["initial_step"])
+        NLopt.initial_step!(model.inner, model.options["initial_step"])
     end
-    population!(model.inner, model.options["population"])
+    NLopt.population!(model.inner, model.options["population"])
     if isa(model.options["seed"], Integer)
         NLopt.srand(model.options["seed"])
     end
-    vector_storage!(model.inner, model.options["vector_storage"])
-    lower_bounds!(model.inner, model.variables.lower)
-    upper_bounds!(model.inner, model.variables.upper)
+    NLopt.vector_storage!(model.inner, model.options["vector_storage"])
+    NLopt.lower_bounds!(model.inner, model.variables.lower)
+    NLopt.upper_bounds!(model.inner, model.variables.upper)
     nleqidx = findall(
         bound -> bound.lower == bound.upper,
         model.nlp_data.constraint_bounds,
@@ -898,18 +862,18 @@ function MOI.optimize!(model::Optimizer)
             fill!(grad, 0.0)
             return 0.0
         end
-        min_objective!(model.inner, z)
+        NLopt.min_objective!(model.inner, z)
     else
         function f(x::Vector, grad::Vector)
             if length(grad) > 0
-                eval_objective_gradient(model, grad, x)
+                _eval_objective_gradient(model, grad, x)
             end
-            return eval_objective(model, x)
+            return _eval_objective(model, x)
         end
         if model.sense == MOI.MIN_SENSE
-            min_objective!(model.inner, f)
+            NLopt.min_objective!(model.inner, f)
         else
-            max_objective!(model.inner, f)
+            NLopt.max_objective!(model.inner, f)
         end
     end
     Jac_IJ =
@@ -959,7 +923,7 @@ function MOI.optimize!(model::Optimizer)
             )
         end
         g_eq(zeros(num_eq), zeros(num_variables), zeros(num_variables, num_eq))
-        equality_constraint!(
+        NLopt.equality_constraint!(
             model.inner,
             g_eq,
             fill(model.options["constrtol_abs"], num_eq),
@@ -1029,7 +993,7 @@ function MOI.optimize!(model::Optimizer)
             zeros(num_variables),
             zeros(num_variables, num_ineq),
         )
-        inequality_constraint!(
+        NLopt.inequality_constraint!(
             model.inner,
             g_ineq,
             fill(model.options["constrtol_abs"], num_ineq),
@@ -1038,11 +1002,11 @@ function MOI.optimize!(model::Optimizer)
     # If nothing is provided, the default starting value is 0.0.
     model.solution = zeros(num_variables)
     for i in eachindex(model.starting_values)
-        model.solution[i] = starting_value(model, i)
+        model.solution[i] = _starting_value(model, i)
     end
     start_time = time()
     model.objective_value, _, model.status =
-        optimize!(model.inner, model.solution)
+        NLopt.optimize!(model.inner, model.solution)
     model.constraint_primal_linear_le =
         _fill_primal(model.solution, model.linear_le_constraints)
     model.constraint_primal_linear_eq =
