@@ -486,6 +486,33 @@ NLOPT_VERSION::VersionNumber
 ```
 where `VersionNumber` is a built-in Julia type from the Julia standard library.
 
+## Thread safety
+
+The underlying NLopt library is threadsafe; however, re-using the same `Opt`
+object across multiple threads is not.
+
+As an example, instead of:
+```julia
+using NLopt
+opt = Opt(:LD_MMA, 2)
+# Define problem
+solutions = Vector{Any}(undef, 10)
+Threads.@threads for i in 1:10
+    # Not thread-safe because `opt` is re-used
+    solutions[i] = optimize(opt, rand(2))
+end
+```
+Do instead:
+```julia
+solutions = Vector{Any}(undef, 10)
+Threads.@threads for i in 1:10
+    # Thread-safe because a new `opt` is created for each thread
+    opt = Opt(:LD_MMA, 2)
+    # Define problem
+    solutions[i] = optimize(opt, rand(2))
+end
+```
+
 ## Author
 
 This module was initially written by [Steven G. Johnson](http://math.mit.edu/~stevenj/),
