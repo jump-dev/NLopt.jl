@@ -208,6 +208,194 @@ function test_return_FAILURE_from_optimize()
     return
 end
 
+function test_optimize!_bounds_error()
+    opt = Opt(:AUGLAG, 2)
+    @test_throws BoundsError optimize!(opt, Cdouble[])
+    return
+end
+
+function test_property_names()
+    opt = Opt(:AUGLAG, 2)
+    for (key, value) in (
+        :lower_bounds => [1, 2],
+        :upper_bounds => [2, 3],
+        :stopval => 0.5,
+        :ftol_rel => 0.1,
+        :ftol_abs => 0.2,
+        :xtol_rel => 0.3,
+        :xtol_abs => [0.4, 0.5],  # TODO
+        :maxeval => 5,
+        :maxtime => 60.0,
+        :force_stop => 1,
+        :population => 0x00000001,
+        :vector_storage => 0x00000002,
+    )
+        @test key in propertynames(opt)
+        f = getfield(NLopt, key)
+        @test getproperty(opt, key) == f(opt)
+        setproperty!(opt, key, value)
+        @test f(opt) == value
+    end
+    # Other getters
+    @test :initial_step in propertynames(opt)
+    @test_throws(
+        ErrorException(
+            "Getting `initial_step` is unsupported. Use `initial_step(opt, x)` to access the initial step at a point `x`.",
+        ),
+        opt.initial_step,
+    )
+    @test :algorithm in propertynames(opt)
+    @test opt.algorithm == algorithm(opt)
+    @test :numevals in propertynames(opt)
+    @test opt.numevals == NLopt.numevals(opt)
+    @test :errmsg in propertynames(opt)
+    @test opt.errmsg == NLopt.errmsg(opt)
+    @test :params in propertynames(opt)
+    @test opt.params == NLopt.OptParams(opt)
+    @test_throws ErrorException("type Opt has no readable property foo") opt.foo
+    return
+end
+
+function test_get_opt_params_default()
+    opt = Opt(:AUGLAG, 2)
+    @test get(opt.params, "abc", :default) == :default
+    return
+end
+
+function test_srand()
+    @test NLopt.srand(1234) === nothing
+    @test NLopt.srand_time() === nothing
+    return
+end
+
+function test_algorithm()
+    opt = Opt(:LD_LBFGS, 2)
+    @test algorithm(opt) == NLopt.LD_LBFGS
+    return
+end
+
+function test_algorithm_enum()
+    @test convert(Algorithm, NLopt.NLOPT_LD_LBFGS) == NLopt.LD_LBFGS
+    @test convert(NLopt.nlopt_algorithm, NLopt.LD_LBFGS) == NLopt.NLOPT_LD_LBFGS
+    return
+end
+
+function test_result_enum()
+    @test convert(Result, NLopt.NLOPT_SUCCESS) == NLopt.SUCCESS
+    @test convert(NLopt.nlopt_result, NLopt.SUCCESS) == NLopt.NLOPT_SUCCESS
+    return
+end
+
+function test_result_arithmetic()
+    @test !(NLopt.SUCCESS < 0)
+    @test 0 < NLopt.SUCCESS
+    @test NLopt.SUCCESS == :SUCCESS
+    @test :SUCCESS == NLopt.SUCCESS
+    return
+end
+
+function test_opt_argument_error()
+    @test_throws ArgumentError Opt(:LD_LBFGS, -2)
+    return
+end
+
+function test_show_opt()
+    opt = Opt(:LD_LBFGS, 2)
+    @test sprint(show, opt) == "Opt(LD_LBFGS, 2)"
+    return
+end
+
+function test_chk()
+    opt = Opt(:LD_LBFGS, 2)
+    @test NLopt.chk(opt, NLopt.SUCCESS) === nothing
+    @test NLopt.chk(opt, NLopt.ROUNDOFF_LIMITED) === nothing
+    @test_throws ArgumentError NLopt.chk(opt, NLopt.INVALID_ARGS)
+    @test_throws OutOfMemoryError NLopt.chk(opt, NLopt.OUT_OF_MEMORY)
+    @test_throws(
+        ErrorException("nlopt failure FAILURE"),
+        NLopt.chk(opt, NLopt.FAILURE)
+    )
+    return
+end
+
+function test_algorithm_name()
+    algorithm = NLopt.LD_LBFGS
+    sol = "Limited-memory BFGS (L-BFGS) (local, derivative-based)"
+    @test algorithm_name(algorithm) == sol
+    @test algorithm_name(:LD_LBFGS) == sol
+    @test algorithm_name(11) == sol
+    opt = Opt(:LD_LBFGS, 2)
+    @test algorithm_name(opt) == sol
+    sprint(show, algorithm_name(:LD_LBFGS))
+    @test sprint(show, MIME("text/plain"), NLopt.LD_LBFGS) ==
+          "NLopt.LD_LBFGS: Limited-memory BFGS (L-BFGS) (local, derivative-based)"
+    return
+end
+
+function test_lower_bounds()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError lower_bounds(opt, Cdouble[])
+    v = [1.0, 2.0]
+    @test lower_bounds(opt, v) === v
+    @test v == [-Inf, -Inf]
+    lower_bounds!(opt, 3)
+    @test lower_bounds(opt) == [3.0, 3.0]
+    lower_bounds!(opt, [1 // 2, 3 // 4])
+    @test lower_bounds(opt) == [0.5, 0.75]
+    return
+end
+
+function test_upper_bounds()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError upper_bounds(opt, Cdouble[])
+    v = [1.0, 2.0]
+    @test upper_bounds(opt, v) === v
+    @test v == [Inf, Inf]
+    upper_bounds!(opt, 3)
+    @test upper_bounds(opt) == [3.0, 3.0]
+    upper_bounds!(opt, [1 // 2, 3 // 4])
+    @test upper_bounds(opt) == [0.5, 0.75]
+    return
+end
+
+function test_xtol_abs()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError xtol_abs(opt, Cdouble[])
+    v = [1.0, 2.0]
+    @test xtol_abs(opt, v) === v
+    @test v == [0.0, 0.0]
+    xtol_abs!(opt, 3)
+    @test xtol_abs(opt) == [3.0, 3.0]
+    xtol_abs!(opt, [1 // 2, 3 // 4])
+    @test xtol_abs(opt) == [0.5, 0.75]
+    return
+end
+
+function test_initial_step()
+    opt = Opt(:LD_LBFGS, 2)
+    @test_throws BoundsError default_initial_step!(opt, Cdouble[])
+    @test_throws BoundsError initial_step!(opt, Cdouble[])
+    x = [1.0, 2.0]
+    dx = [NaN, NaN]
+    default_initial_step!(opt, [0.2, 0.4])
+    @test initial_step(opt, x, dx) == [0.2, 0.4]
+    default_initial_step!(opt, [1 // 2, 3 // 4])
+    @test initial_step(opt, x, dx) == [0.5, 0.75]
+    @test_throws BoundsError initial_step(opt, x, Cdouble[])
+    @test_throws BoundsError initial_step(opt, Cdouble[], dx)
+    default_initial_step!(opt, x)
+    @test initial_step(opt, x, dx) == [1.0, 2.0]
+    @test dx == [1.0, 2.0]
+    @test initial_step(opt, [1 // 1, 2 // 1]) == [1.0, 2.0]
+    initial_step!(opt, [0.1, 0.2])
+    @test initial_step(opt, x, dx) == [0.1, 0.2]
+    initial_step!(opt, [2 // 10, 3 // 10])
+    @test initial_step(opt, x, dx) == [0.2, 0.3]
+    initial_step!(opt, 1 // 2)
+    @test initial_step(opt, x, dx) == [0.5, 0.5]
+    return
+end
+
 end  # module
 
 TestCAPI.runtests()
