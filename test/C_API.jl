@@ -75,8 +75,8 @@ function test_issue_156_no_error()
 end
 
 function test_invalid_algorithms()
-    @test_throws ArgumentError("unknown algorithm BILL") Algorithm(:BILL)
-    @test_throws ArgumentError("unknown algorithm BILL") Opt(:BILL, 420)
+    @test_throws ArgumentError("unknown algorithm: BILL") Algorithm(:BILL)
+    @test_throws ArgumentError("unknown algorithm: BILL") Opt(:BILL, 420)
     return
 end
 
