@@ -128,7 +128,7 @@ The `algorithm` attribute is required. The value must be one of the supported
 
 Other parameters include `stopval`, `ftol_rel`, `ftol_abs`, `xtol_rel`,
 `xtol_abs`, `constrtol_abs`, `maxeval`, `maxtime`, `initial_step`, `population`,
-`seed`, annd `vector_storage`.
+`seed`, and `vector_storage`.
 
 The ``algorithm`` parameter is required, and all others are optional. The
 meaning and acceptable values of all parameters, except `constrtol_abs`, match
@@ -151,16 +151,12 @@ using NLopt
 ```
 which imports the NLopt module and its symbols.  Alternatively, you can use
 `import NLopt` if you want to keep all the NLopt symbols in their own namespace.
-You would then prefix all functions below with `NLopt.`, e.g. `NLopt.Opt` and so
+You would then prefix all functions below with `NLopt.`, for example `NLopt.Opt` and so
 on.
 
 ### The `Opt` type
 
-The NLopt API revolves around an object of type `Opt`. Via functions acting on
-this object, all of the parameters of the optimization are specified (dimensions,
-algorithm, stopping criteria, constraints, objective function, etcetera), and
-then one finally calls the `optimize` function in order to perform the
-optimization.
+The NLopt API revolves around an object of type `Opt`.
 
 The object should normally be created via the constructor:
 ```julia
@@ -171,9 +167,8 @@ for possible values) and the dimensionality of the problem (`n`, the number of
 optimization parameters).
 
 Whereas in C the algorithms are specified by `nlopt_algorithm` constants of the
-form `NLOPT_LD_MMA`, `NLOPT_LN_COBYLA`, etcetera, the Julia `algorithm` values
-are symbols of the form `:LD_MMA`, `:LN_COBYLA`, etcetera (with the `NLOPT_`
-prefix replaced by `:` to create a Julia symbol).
+form like `NLOPT_LD_MMA`, the Julia `algorithm` values are symbols of the form
+`:LD_MMA` with the `NLOPT_` prefix replaced by `:` to create a Julia symbol.
 
 There is also a `copy(opt::Opt)` function to make a copy of a given object
 (equivalent to `nlopt_copy` in the C API).
@@ -301,7 +296,7 @@ upon return, should be set *in-place* to the constraint results at the point `x`
 Any return value of the function is ignored.
 
 In addition, if the argument `grad` is not empty (that is, `length(grad) > 0`),
-then `grad` is a 2d array of size `n`&times;`m` which should (upon return) be
+then `grad` is a matrix of size `n`&times;`m` which should (upon return) be
 set in-place (see above) to the gradient of the function with respect to the
 optimization parameters at `x`. That is, `grad[j,i]` should upon return contain
 the partial derivative &part;f<sub>`i`</sub>/&part;x<sub>`j`</sub>.
@@ -407,8 +402,7 @@ is the same but modifies `x` in-place (as well as returning `optx = x`).
 
 The possible return values are the same as the [return values in the C API](https://nlopt.readthedocs.io/en/latest/NLopt_Reference/#Return_values),
 except that the `NLOPT_` prefix is replaced with `:`.  That is, the return
-values are `:SUCCESS`, `:XTOL_REACHED`, etcetera (instead of `NLOPT_SUCCESS`
-etcetera).
+values are like `:SUCCESS` instead `NLOPT_SUCCESS`.
 
 ### Local/subsidiary optimization algorithm
 
