@@ -625,6 +625,42 @@ function test_initial_step()
     return
 end
 
+function test_copy()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(x::Vector, grad::Vector, a, b)
+        if length(grad) > 0
+            grad[1] = 3 * a * (a * x[1] + b)^2
+            grad[2] = -1
+        end
+        return (a * x[1] + b)^3 - x[2]
+    end
+    opt = Opt(:LD_MMA, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    inequality_constraint!(opt, (x, g) -> my_constraint_fn(x, g, 2, 0), 1e-8)
+    inequality_constraint!(opt, (x, g) -> my_constraint_fn(x, g, -1, 1), 1e-8)
+    opt_2 = copy(opt)
+    min_f, min_x, ret = optimize(opt_2, [1.234, 5.678])
+    @test min_f ≈ 0.5443310477213124
+    @test min_x ≈ [0.3333333342139688, 0.29629628951338166]
+    @test ret == :XTOL_REACHED
+    return
+end
+
+function test_copy_failure()
+    opt = Opt(:LD_MMA, 2)
+    opt.opt = C_NULL
+    @test_throws ErrorException("Error in nlopt_copy") copy(opt)
+    return
+end
+
 end  # module
 
 TestCAPI.runtests()
