@@ -139,12 +139,12 @@ all constraints.
 
 ## Automatic differetiation
 
-Some algorithms in NLopt required derivatives, which you must manually provide
+Some algorithms in NLopt require derivatives, which you must manually provide
 in the `if length(grad) > 0` branch of your objective and constraint functions.
 
-To stay simple and lightweighht, NLopt does not provide ways to automatically
+To stay simple and lightweight, NLopt does not provide ways to automatically
 compute derivatives. If you do not have analytic expressions for the derivatives,
-use package such as [ForwardDiff.jl](https://github.com/JuliaDiff/ForwardDiff.jl)
+use a package such as [ForwardDiff.jl](https://github.com/JuliaDiff/ForwardDiff.jl)
 to compute automatic derivatives.
 
 Here is an example of how to wrap a function `f(x::Vector)` using ForwardDiff so
