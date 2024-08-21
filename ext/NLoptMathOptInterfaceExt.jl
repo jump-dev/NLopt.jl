@@ -455,7 +455,13 @@ end
 function MOI.is_valid(
     model::Optimizer,
     ci::MOI.ConstraintIndex{F,S},
-) where {F,S}
+) where {
+    F<:Union{
+        MOI.ScalarAffineFunction{Float64},
+        MOI.ScalarQuadraticFunction{Float64},
+    },
+    S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
+}
     return 1 <= ci.value <= length(_constraints(model, F, S))
 end
 
