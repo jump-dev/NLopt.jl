@@ -31,6 +31,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
+    nlp_model::Union{Nothing,MOI.Nonlinear.Model}
+    ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
         MOI.VariableIndex,
@@ -75,6 +77,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             Union{Nothing,Float64}[],
             MOI.NLPBlockData([], _EmptyNLPEvaluator(), false),
             nothing,
+            MOI.Nonlinear.SparseReverseMode(),
+            nothing,
             nothing,
             _ConstraintInfo{
                 MOI.ScalarAffineFunction{Float64},
@@ -115,6 +119,7 @@ function MOI.empty!(model::Optimizer)
     MOI.empty!(model.variables)
     empty!(model.starting_values)
     model.nlp_data = MOI.NLPBlockData([], _EmptyNLPEvaluator(), false)
+    model.nlp_model = nothing
     model.sense = nothing
     model.objective = nothing
     empty!(model.linear_le_constraints)
@@ -129,6 +134,7 @@ function MOI.is_empty(model::Optimizer)
     return MOI.is_empty(model.variables) &&
            isempty(model.starting_values) &&
            model.nlp_data.evaluator isa _EmptyNLPEvaluator &&
+           model.nlp_model === nothing &&
            model.sense == nothing &&
            isempty(model.linear_le_constraints) &&
            isempty(model.linear_eq_constraints) &&
@@ -527,6 +533,9 @@ end
 MOI.supports(::Optimizer, ::MOI.NLPBlock) = true
 
 function MOI.set(model::Optimizer, ::MOI.NLPBlock, nlp_data::MOI.NLPBlockData)
+    if model.nlp_model !== nothing
+        error("Cannot mix the new and legacy nonlinear APIs")
+    end
     model.nlp_data = nlp_data
     return
 end
@@ -546,7 +555,12 @@ function MOI.supports(
     return true
 end
 
-MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType) = typeof(model.objective)
+function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
+    if model.nlp_model !== nothing && model.nlp_model.objective !== nothing
+        return MOI.ScalarNonlinearFunction
+    end
+    return typeof(model.objective)
+end
 
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunction{F}) where {F}
     return convert(F, model.objective)::F
@@ -565,8 +579,107 @@ function MOI.set(
 }
     _check_inbounds(model, func)
     model.objective = func
+    if model.nlp_model !== nothing
+        MOI.Nonlinear.set_objective(model.nlp_model, nothing)
+    end
     return
 end
+
+# ScalarNonlinearFunction
+
+function _init_nlp_model(model)
+    if model.nlp_model === nothing
+        if !(model.nlp_data.evaluator isa _EmptyNLPEvaluator)
+            error("Cannot mix the new and legacy nonlinear APIs")
+        end
+        model.nlp_model = MOI.Nonlinear.Model()
+    end
+    return
+end
+
+function MOI.is_valid(
+    model::Optimizer,
+    ci::MOI.ConstraintIndex{MOI.ScalarNonlinearFunction,S},
+) where {
+    S<:Union{
+        MOI.EqualTo{Float64},
+        MOI.LessThan{Float64},
+        MOI.GreaterThan{Float64},
+        MOI.Interval{Float64},
+    },
+}
+    if model.nlp_model === nothing
+        return false
+    end
+    index = MOI.Nonlinear.ConstraintIndex(ci.value)
+    return MOI.is_valid(model.nlp_model, index)
+end
+
+function MOI.supports_constraint(
+    ::Optimizer,
+    ::Type{MOI.ScalarNonlinearFunction},
+    ::Type{S},
+) where {
+    S<:Union{
+        MOI.EqualTo{Float64},
+        MOI.LessThan{Float64},
+        MOI.GreaterThan{Float64},
+        MOI.Interval{Float64},
+    },
+}
+    return true
+end
+
+function MOI.add_constraint(
+    model::Optimizer,
+    f::MOI.ScalarNonlinearFunction,
+    set::Union{
+        MOI.EqualTo{Float64},
+        MOI.LessThan{Float64},
+        MOI.GreaterThan{Float64},
+        MOI.Interval{Float64},
+    },
+)
+    _init_nlp_model(model)
+    index = MOI.Nonlinear.add_constraint(model.nlp_model, f, set)
+    return MOI.ConstraintIndex{typeof(f),typeof(s)}(index.value)
+end
+
+function MOI.supports(
+    ::Optimizer,
+    ::MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction},
+)
+    return true
+end
+
+function MOI.set(
+    model::Optimizer,
+    attr::MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction},
+    func::MOI.ScalarNonlinearFunction,
+)
+    _init_nlp_model(model)
+    MOI.Nonlinear.set_objective(model.nlp_model, func)
+    return
+end
+
+### MOI.AutomaticDifferentiationBackend
+
+MOI.supports(::Optimizer, ::MOI.AutomaticDifferentiationBackend) = true
+
+function MOI.get(model::Optimizer, ::MOI.AutomaticDifferentiationBackend)
+    return model.ad_backend
+end
+
+function MOI.set(
+    model::Optimizer,
+    ::MOI.AutomaticDifferentiationBackend,
+    backend::MOI.Nonlinear.AbstractAutomaticDifferentiation,
+)
+    model.ad_backend = backend
+    return
+end
+
+# optimize!
 
 function _fill_gradient(grad, x, f::MOI.VariableIndex)
     grad[f.value] = 1.0
@@ -704,6 +817,12 @@ function MOI.optimize!(model::Optimizer)
     num_variables = length(model.starting_values)
     model.inner = NLopt.Opt(model.options["algorithm"], num_variables)
     _initialize_options!(model)
+    if model.nlp_model !== nothing
+        vars = MOI.VariableIndex.(1:num_variables)
+        model.nlp_data = MOI.NLPBlock(
+            MOI.Nonlinear.Evaluator(model.nlp_model, model.ad_backend, vars),
+        )
+    end
     NLopt.lower_bounds!(model.inner, model.variables.lower)
     NLopt.upper_bounds!(model.inner, model.variables.upper)
     nonlinear_equality_indices = findall(
