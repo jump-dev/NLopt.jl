@@ -1,6 +1,6 @@
 name = "NLopt"
 uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
-version = "1.0.3"
+version = "1.1.0"
 
 [deps]
 CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
@@ -14,7 +14,8 @@ MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 NLoptMathOptInterfaceExt = ["MathOptInterface"]
 
 [compat]
-MathOptInterface = "1"
+CEnum = "0.5"
+MathOptInterface = "1.25"
 NLopt_jll = "2.7"
 julia = "1.6"
 
