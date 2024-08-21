@@ -667,9 +667,11 @@ end
 function _initialize_options!(model::Optimizer)
     local_optimizer = model.options["local_optimizer"]
     if local_optimizer !== nothing
+        num_variables = length(model.starting_values)
         local_optimizer = if local_optimizer isa Symbol
             NLopt.Opt(local_optimizer, num_variables)
         else
+            @assert local_optimizer isa NLopt.Opt
             NLopt.Opt(local_optimizer.algorithm, num_variables)
         end
         NLopt.local_optimizer!(model.inner, local_optimizer)

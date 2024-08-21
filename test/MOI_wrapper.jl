@@ -152,6 +152,64 @@ function test_list_of_constraint_attributes_set()
     return
 end
 
+function test_raw_optimizer_attribute_in_optimize()
+    model = NLopt.Optimizer()
+    x = MOI.add_variables(model, 2)
+    f = (x[1] - 2.0) * (x[1] - 2.0) + (x[2] + 1.0)^2# * (x[2] + 1)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{typeof(f)}(), f)
+    for (k, v) in (
+        "algorithm" => :LD_SLSQP,
+        "stopval" => 1.0,
+        "ftol_rel" => 1e-6,
+        "ftol_abs" => 1e-6,
+        "xtol_rel" => 1e-6,
+        "xtol_abs" => 1e-6,
+        "maxeval" => 100,
+        "maxtime" => 60.0,
+        "initial_step" => [0.1, 0.1],
+        "population" => 10,
+        "seed" => 1234,
+        "vector_storage" => 3,
+    )
+        attr = MOI.RawOptimizerAttribute(k)
+        MOI.set(model, attr, v)
+    end
+    MOI.optimize!(model)
+    @test ≈(MOI.get.(model, MOI.VariablePrimal(), x), [2.0, -1.0]; atol = 1e-4)
+    return
+end
+
+function test_local_optimizer_Symbol()
+    model = NLopt.Optimizer()
+    x = MOI.add_variables(model, 2)
+    f = (x[1] - 2.0) * (x[1] - 2.0) + (x[2] + 1.0) * (x[2] + 1.0)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{typeof(f)}(), f)
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :AUGLAG)
+    attr = MOI.RawOptimizerAttribute("local_optimizer")
+    @test MOI.get(model, attr) === nothing
+    MOI.set(model, attr, :LD_SLSQP)
+    MOI.optimize!(model)
+    @test MOI.get(model, MOI.TerminationStatus()) isa MOI.TerminationStatusCode
+    return
+end
+
+function test_local_optimizer_Opt()
+    model = NLopt.Optimizer()
+    x = MOI.add_variables(model, 2)
+    f = (x[1] - 2.0) * (x[1] - 2.0) + (x[2] + 1.0) * (x[2] + 1.0)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{typeof(f)}(), f)
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :GD_MLSL)
+    attr = MOI.RawOptimizerAttribute("local_optimizer")
+    @test MOI.get(model, attr) === nothing
+    MOI.set(model, attr, NLopt.Opt(:LD_MMA, 2))
+    MOI.optimize!(model)
+    @test MOI.get(model, MOI.TerminationStatus()) isa MOI.TerminationStatusCode
+    return
+end
+
 function test_get_objective_function()
     model = NLopt.Optimizer()
     x = MOI.add_variable(model)
