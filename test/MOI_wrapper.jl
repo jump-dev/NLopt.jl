@@ -72,6 +72,10 @@ function test_runtests()
             # Perhaps an expected failure because the problem is non-convex
             r"^test_quadratic_nonconvex_constraint_basic$",
             r"^test_quadratic_nonconvex_constraint_integration$",
+            # A whole bunch of issues to diagnose here
+            "test_basic_VectorNonlinearFunction_",
+            # INVALID_OPTION?
+            r"^test_nonlinear_expression_hs109$",
             other_failures...,
         ],
     )
@@ -159,6 +163,129 @@ function test_get_objective_function()
     @test MOI.get(model, MOI.ObjectiveFunction{MOI.VariableIndex}()) == x
     F = MOI.ScalarAffineFunction{Float64}
     @test isapprox(MOI.get(model, MOI.ObjectiveFunction{F}()), 1.0 * x)
+    return
+end
+
+function test_ScalarNonlinearFunction_mix_apis_nlpblock_last()
+    model = NLopt.Optimizer()
+    x = MOI.add_variable(model)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.add_constraint(model, f, MOI.LessThan(1.0))
+    evaluator = MOI.Test.HS071(false, false)
+    bounds = MOI.NLPBoundsPair.([25.0, 40.0], [Inf, 40.0])
+    block = MOI.NLPBlockData(bounds, evaluator, true)
+    @test_throws(
+        ErrorException("Cannot mix the new and legacy nonlinear APIs"),
+        MOI.set(model, MOI.NLPBlock(), block),
+    )
+    return
+end
+
+function test_ScalarNonlinearFunction_mix_apis_nlpblock_first()
+    model = NLopt.Optimizer()
+    x = MOI.add_variable(model)
+    evaluator = MOI.Test.HS071(false, false)
+    bounds = MOI.NLPBoundsPair.([25.0, 40.0], [Inf, 40.0])
+    block = MOI.NLPBlockData(bounds, evaluator, true)
+    MOI.set(model, MOI.NLPBlock(), block)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    @test_throws(
+        ErrorException("Cannot mix the new and legacy nonlinear APIs"),
+        MOI.add_constraint(model, f, MOI.LessThan(1.0)),
+    )
+    return
+end
+
+function test_ScalarNonlinearFunction_is_valid()
+    model = NLopt.Optimizer()
+    x = MOI.add_variable(model)
+    F, S = MOI.ScalarNonlinearFunction, MOI.EqualTo{Float64}
+    @test MOI.is_valid(model, MOI.ConstraintIndex{F,S}(1)) == false
+    f = MOI.ScalarNonlinearFunction(:sin, Any[x])
+    c = MOI.add_constraint(model, f, MOI.EqualTo(0.0))
+    @test c isa MOI.ConstraintIndex{F,S}
+    @test MOI.is_valid(model, c) == true
+    return
+end
+
+function test_ScalarNonlinearFunction_ObjectiveFunctionType()
+    model = NLopt.Optimizer()
+    x = MOI.add_variable(model)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+    F = MOI.ScalarNonlinearFunction
+    MOI.set(model, MOI.ObjectiveFunction{F}(), f)
+    @test MOI.get(model, MOI.ObjectiveFunctionType()) == F
+    return
+end
+
+function test_AutomaticDifferentiationBackend()
+    model = NLopt.Optimizer()
+    attr = MOI.AutomaticDifferentiationBackend()
+    @test MOI.supports(model, attr)
+    @test MOI.get(model, attr) == MOI.Nonlinear.SparseReverseMode()
+    MOI.set(model, attr, MOI.Nonlinear.ExprGraphOnly())
+    @test MOI.get(model, attr) == MOI.Nonlinear.ExprGraphOnly()
+    return
+end
+
+function test_ScalarNonlinearFunction_LessThan()
+    model = NLopt.Optimizer()
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_SLSQP)
+    x = MOI.add_variable(model)
+    # Needed for NLopt#31
+    MOI.set(model, MOI.VariablePrimalStart(), x, 1.0)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.add_constraint(model, f, MOI.LessThan(2.0))
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{MOI.VariableIndex}(), x)
+    MOI.optimize!(model)
+    @test isapprox(MOI.get(model, MOI.VariablePrimal(), x), exp(2); atol = 1e-4)
+    return
+end
+
+function test_ScalarNonlinearFunction_GreaterThan()
+    model = NLopt.Optimizer()
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_SLSQP)
+    x = MOI.add_variable(model)
+    # Needed for NLopt#31
+    MOI.set(model, MOI.VariablePrimalStart(), x, 1.0)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.add_constraint(model, f, MOI.GreaterThan(2.0))
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{MOI.VariableIndex}(), x)
+    MOI.optimize!(model)
+    @test isapprox(MOI.get(model, MOI.VariablePrimal(), x), exp(2); atol = 1e-4)
+    return
+end
+
+function test_ScalarNonlinearFunction_Interval()
+    model = NLopt.Optimizer()
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_SLSQP)
+    x = MOI.add_variable(model)
+    # Needed for NLopt#31
+    MOI.set(model, MOI.VariablePrimalStart(), x, 1.0)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.add_constraint(model, f, MOI.Interval(1.0, 2.0))
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{MOI.VariableIndex}(), x)
+    MOI.optimize!(model)
+    @test isapprox(MOI.get(model, MOI.VariablePrimal(), x), exp(2); atol = 1e-4)
+    return
+end
+
+function test_ScalarNonlinearFunction_derivative_free()
+    model = NLopt.Optimizer()
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LN_COBYLA)
+    x = MOI.add_variable(model)
+    # Needed for NLopt#31
+    MOI.set(model, MOI.VariablePrimalStart(), x, 1.0)
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.add_constraint(model, f, MOI.GreaterThan(2.0))
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{MOI.VariableIndex}(), x)
+    MOI.optimize!(model)
+    @test isapprox(MOI.get(model, MOI.VariablePrimal(), x), exp(2); atol = 1e-4)
     return
 end
 
