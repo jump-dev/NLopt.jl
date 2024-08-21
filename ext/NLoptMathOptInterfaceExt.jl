@@ -642,7 +642,7 @@ function MOI.add_constraint(
 )
     _init_nlp_model(model)
     index = MOI.Nonlinear.add_constraint(model.nlp_model, f, set)
-    return MOI.ConstraintIndex{typeof(f),typeof(s)}(index.value)
+    return MOI.ConstraintIndex{typeof(f),typeof(set)}(index.value)
 end
 
 function MOI.supports(
