@@ -137,6 +137,45 @@ the descriptions below from the specialized NLopt API.
 The `constrtol_abs` parameter is an absolute feasibility tolerance applied to
 all constraints.
 
+## Automatic differetiation
+
+Some algorithms in NLopt required derivatives, which you must manually provide
+in the `if length(grad) > 0` branch of your objective and constraint functions.
+
+To stay simple and lightweighht, NLopt does not provide ways to automatically
+compute derivatives. If you do not have analytic expressions for the derivatives,
+use package such as [ForwardDiff.jl](https://github.com/JuliaDiff/ForwardDiff.jl)
+to compute automatic derivatives.
+
+Here is an example of how to wrap a function `f(x::Vector)` using ForwardDiff so
+that it is compatible with NLopt:
+```julia
+using NLopt
+import ForwardDiff
+function autodiff(f::Function)
+    function nlopt_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            # Use ForwardDiff to compute the gradient. Replace with your
+            # favorite Julia automatic differentiation package.
+            ForwardDiff.gradient!(grad, f, x)
+        end
+        return f(x)
+    end
+end
+# These functions do not implement `grad`:
+my_objective_fn(x::Vector) = sqrt(x[2]);
+my_constraint_fn(x::Vector, a, b) = (a * x[1] + b)^3 - x[2];
+opt = NLopt.Opt(:LD_MMA, 2)
+NLopt.lower_bounds!(opt, [-Inf, 0.0])
+NLopt.xtol_rel!(opt, 1e-4)
+# But we wrap them in autodiff before passing to NLopt:
+NLopt.min_objective!(opt, autodiff(my_objective_fn))
+NLopt.inequality_constraint!(opt, autodiff(x -> my_constraint_fn(x, 2, 0)), 1e-8)
+NLopt.inequality_constraint!(opt, autodiff(x -> my_constraint_fn(x, -1, 1)), 1e-8)
+min_f, min_x, ret = NLopt.optimize(opt, [1.234, 5.678])
+# (0.5443310477213124, [0.3333333342139688, 0.29629628951338166], :XTOL_REACHED)
+```
+
 ## Reference
 
 The main purpose of this section is to document the syntax and unique features
