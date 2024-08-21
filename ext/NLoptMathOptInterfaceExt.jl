@@ -819,7 +819,7 @@ function MOI.optimize!(model::Optimizer)
     _initialize_options!(model)
     if model.nlp_model !== nothing
         vars = MOI.VariableIndex.(1:num_variables)
-        model.nlp_data = MOI.NLPBlock(
+        model.nlp_data = MOI.NLPBlockData(
             MOI.Nonlinear.Evaluator(model.nlp_model, model.ad_backend, vars),
         )
     end
