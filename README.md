@@ -1,9 +1,9 @@
 # NLopt.jl
 
-[![Build Status](https://github.com/JuliaOpt/NLopt.jl/workflows/CI/badge.svg?branch=master)](https://github.com/JuliaOpt/NLopt.jl/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/JuliaOpt/NLopt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaOpt/NLopt.jl)
+[![Build Status](https://github.com/jump-dev/NLopt.jl/workflows/CI/badge.svg?branch=master)](https://github.com/jump-dev/NLopt.jl/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/jump-dev/NLopt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/jump-dev/NLopt.jl)
 
-[NLopt.jl](https://github.com/JuliaOpt/NLopt.jl) is a wrapper for the
+[NLopt.jl](https://github.com/jump-dev/NLopt.jl) is a wrapper for the
 [NLopt](https://nlopt.readthedocs.io/en/latest/) library for nonlinear
 optimization.
 
@@ -18,7 +18,7 @@ including:
 
 ## License
 
-`NLopt.jl` is licensed under the [MIT License](https://github.com/JuliaOpt/NLopt.jl/blob/master/LICENSE.md).
+`NLopt.jl` is licensed under the [MIT License](https://github.com/jump-dev/NLopt.jl/blob/master/LICENSE.md).
 
 The underlying solver, [stevengj/nlopt](https://github.com/stevengj/nlopt), is
 licensed under the [LGPL v3.0 license](https://github.com/stevengj/nlopt/blob/master/COPYING).
