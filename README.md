@@ -137,7 +137,7 @@ the descriptions below from the specialized NLopt API.
 The `constrtol_abs` parameter is an absolute feasibility tolerance applied to
 all constraints.
 
-## Automatic differetiation
+## Automatic differentiation
 
 Some algorithms in NLopt require derivatives, which you must manually provide
 in the `if length(grad) > 0` branch of your objective and constraint functions.
