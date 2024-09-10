@@ -196,6 +196,28 @@ function test_vector_forced_stop()
     return
 end
 
+function test_vector_interrupt_exception()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if length(grad) > 0
+            grad[1] = 0
+            grad[2] = 0.5 / sqrt(x[2])
+        end
+        return sqrt(x[2])
+    end
+    function my_constraint_fn(ret, x::Vector, grad::Matrix)
+        throw(NLopt.InterruptException())
+        return
+    end
+    opt = Opt(:LD_MMA, 2)
+    lower_bounds!(opt, [-Inf, 0.0])
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    inequality_constraint!(opt, my_constraint_fn, [1e-8, 1e-8])
+    min_f, min_x, ret = optimize(opt, [1.234, 5.678])
+    @test ret == :FORCED_STOP
+    return
+end
+
 function test_max_objective()
     opt = Opt(:LD_MMA, 2)
     function objective_fn(x, grad)
