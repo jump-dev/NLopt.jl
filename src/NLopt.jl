@@ -501,6 +501,8 @@ end
 function _catch_forced_stop(o::Opt, e)
     if e isa ForcedStop
         setfield!(o, :exception, e)
+    elseif e isa InterruptException
+        setfield!(o, :exception, ForcedStop())
     else
         setfield!(o, :exception, CapturedException(e, catch_backtrace()))
     end
