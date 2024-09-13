@@ -82,6 +82,60 @@ solution status       : XTOL_REACHED
 # function evaluation : 11
 ```
 
+### Trace iterations
+
+A common feature request is for a callback that can used to trace the solution
+over the iterations of the optimizer.
+    
+There is no native support for this in NLopt. Instead, add the callback to your
+objective function.
+
+```julia
+julia> using NLopt
+
+julia> begin
+           trace = Any[]
+           function my_objective_fn(x::Vector, grad::Vector)
+               if length(grad) > 0
+                   grad[1] = 0
+                   grad[2] = 0.5 / sqrt(x[2])
+               end
+               value = sqrt(x[2])
+               push!(trace, copy(x) => value)
+               return value
+           end
+           function my_constraint_fn(x::Vector, grad::Vector, a, b)
+               if length(grad) > 0
+                   grad[1] = 3 * a * (a * x[1] + b)^2
+                   grad[2] = -1
+               end
+               return (a * x[1] + b)^3 - x[2]
+           end
+           opt = NLopt.Opt(:LD_MMA, 2)
+           NLopt.lower_bounds!(opt, [-Inf, 0.0])
+           NLopt.xtol_rel!(opt, 1e-4)
+           NLopt.min_objective!(opt, my_objective_fn)
+           NLopt.inequality_constraint!(opt, (x, g) -> my_constraint_fn(x, g, 2, 0), 1e-8)
+           NLopt.inequality_constraint!(opt, (x, g) -> my_constraint_fn(x, g, -1, 1), 1e-8)
+           min_f, min_x, ret = NLopt.optimize(opt, [1.234, 5.678])
+       end
+(0.5443310477213124, [0.3333333342139688, 0.29629628951338166], :XTOL_REACHED)
+
+julia> trace
+11-element Vector{Any}:
+                            [1.234, 5.678] => 2.382855429941145
+   [0.8787394664016357, 5.551370325142423] => 2.3561346152421816
+   [0.8262160034228196, 5.043903787432386] => 2.245863706334912
+  [0.4739440370386794, 4.0767726724255375] => 2.0191019470114773
+    [0.35389779634506047, 3.0308503583016] => 1.7409337604577608
+ [0.33387310647853335, 1.9717933962872487] => 1.4042056104029954
+  [0.3333337209575201, 1.0450874902862517] => 1.0222952070152005
+ [0.33333357431034494, 0.4695027039311135] => 0.6852026736164369
+  [0.3333332772332185, 0.3057923933552822] => 0.5529849847466767
+ [0.33333339455750244, 0.2963215980646768] => 0.5443542946139737
+ [0.3333333342139688, 0.29629628951338166] => 0.5443310477213124
+```
+
 ## Use with JuMP
 
 NLopt implements the [MathOptInterface interface](https://jump.dev/MathOptInterface.jl/stable/reference/nonlinear/)
