@@ -17,7 +17,7 @@ function _is_version_newer_than_2_9()
         minor::Ptr{Cint},
         bugfix::Ptr{Cint},
     )::Cvoid
-    return (major[] > 2) || (major == 2 && minor[] >= 9)
+    return (major[] > 2) || (major[] == 2 && minor[] >= 9)
 end
 
 include("libnlopt.jl")
