@@ -8,56 +8,117 @@ module NLopt
 using CEnum: @cenum
 using NLopt_jll: libnlopt
 
+# NLopt@2.9.0 removed the LD_LBFGS_NOCEDAL enum.
+# See https://github.com/stevengj/nlopt/issues/584 for details.
+function _is_version_newer_than_2_9()
+    major, minor, bugfix = Ref{Cint}(), Ref{Cint}(), Ref{Cint}()
+    @ccall libnlopt.nlopt_version(
+        major::Ptr{Cint},
+        minor::Ptr{Cint},
+        bugfix::Ptr{Cint},
+    )::Cvoid
+    return major[] >= 2 && minor[] >= 9
+end
+
 include("libnlopt.jl")
 
 ############################################################################
 # Mirrors of NLopt's C enum constants:
 
-@enum Algorithm::Cint begin
-    GN_DIRECT = 0
-    GN_DIRECT_L = 1
-    GN_DIRECT_L_RAND = 2
-    GN_DIRECT_NOSCAL = 3
-    GN_DIRECT_L_NOSCAL = 4
-    GN_DIRECT_L_RAND_NOSCAL = 5
-    GN_ORIG_DIRECT = 6
-    GN_ORIG_DIRECT_L = 7
-    GD_STOGO = 8
-    GD_STOGO_RAND = 9
-    LD_LBFGS_NOCEDAL = 10
-    LD_LBFGS = 11
-    LN_PRAXIS = 12
-    LD_VAR1 = 13
-    LD_VAR2 = 14
-    LD_TNEWTON = 15
-    LD_TNEWTON_RESTART = 16
-    LD_TNEWTON_PRECOND = 17
-    LD_TNEWTON_PRECOND_RESTART = 18
-    GN_CRS2_LM = 19
-    GN_MLSL = 20
-    GD_MLSL = 21
-    GN_MLSL_LDS = 22
-    GD_MLSL_LDS = 23
-    LD_MMA = 24
-    LN_COBYLA = 25
-    LN_NEWUOA = 26
-    LN_NEWUOA_BOUND = 27
-    LN_NELDERMEAD = 28
-    LN_SBPLX = 29
-    LN_AUGLAG = 30
-    LD_AUGLAG = 31
-    LN_AUGLAG_EQ = 32
-    LD_AUGLAG_EQ = 33
-    LN_BOBYQA = 34
-    GN_ISRES = 35
-    AUGLAG = 36
-    AUGLAG_EQ = 37
-    G_MLSL = 38
-    G_MLSL_LDS = 39
-    LD_SLSQP = 40
-    LD_CCSAQ = 41
-    GN_ESCH = 42
-    GN_AGS = 43
+@static if _is_version_newer_than_2_9()
+    @enum Algorithm::Cint begin
+        GN_DIRECT = 0
+        GN_DIRECT_L
+        GN_DIRECT_L_RAND
+        GN_DIRECT_NOSCAL
+        GN_DIRECT_L_NOSCAL
+        GN_DIRECT_L_RAND_NOSCAL
+        GN_ORIG_DIRECT
+        GN_ORIG_DIRECT_L
+        GD_STOGO
+        GD_STOGO_RAND
+        # LD_LBFGS_NOCEDAL
+        LD_LBFGS
+        LN_PRAXIS
+        LD_VAR1
+        LD_VAR2
+        LD_TNEWTON
+        LD_TNEWTON_RESTART
+        LD_TNEWTON_PRECOND
+        LD_TNEWTON_PRECOND_RESTART
+        GN_CRS2_LM
+        GN_MLSL
+        GD_MLSL
+        GN_MLSL_LDS
+        GD_MLSL_LDS
+        LD_MMA
+        LN_COBYLA
+        LN_NEWUOA
+        LN_NEWUOA_BOUND
+        LN_NELDERMEAD
+        LN_SBPLX
+        LN_AUGLAG
+        LD_AUGLAG
+        LN_AUGLAG_EQ
+        LD_AUGLAG_EQ
+        LN_BOBYQA
+        GN_ISRES
+        AUGLAG
+        AUGLAG_EQ
+        G_MLSL
+        G_MLSL_LDS
+        LD_SLSQP
+        LD_CCSAQ
+        GN_ESCH
+        GN_AGS
+    end
+else
+    @enum Algorithm::Cint begin
+        GN_DIRECT = 0
+        GN_DIRECT_L
+        GN_DIRECT_L_RAND
+        GN_DIRECT_NOSCAL
+        GN_DIRECT_L_NOSCAL
+        GN_DIRECT_L_RAND_NOSCAL
+        GN_ORIG_DIRECT
+        GN_ORIG_DIRECT_L
+        GD_STOGO
+        GD_STOGO_RAND
+        LD_LBFGS_NOCEDAL
+        LD_LBFGS
+        LN_PRAXIS
+        LD_VAR1
+        LD_VAR2
+        LD_TNEWTON
+        LD_TNEWTON_RESTART
+        LD_TNEWTON_PRECOND
+        LD_TNEWTON_PRECOND_RESTART
+        GN_CRS2_LM
+        GN_MLSL
+        GD_MLSL
+        GN_MLSL_LDS
+        GD_MLSL_LDS
+        LD_MMA
+        LN_COBYLA
+        LN_NEWUOA
+        LN_NEWUOA_BOUND
+        LN_NELDERMEAD
+        LN_SBPLX
+        LN_AUGLAG
+        LD_AUGLAG
+        LN_AUGLAG_EQ
+        LD_AUGLAG_EQ
+        LN_BOBYQA
+        GN_ISRES
+        AUGLAG
+        AUGLAG_EQ
+        G_MLSL
+        G_MLSL_LDS
+        LD_SLSQP
+        LD_CCSAQ
+        GN_ESCH
+        GN_AGS
+    end
 end
 
 Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))

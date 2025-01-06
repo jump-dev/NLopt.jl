@@ -567,7 +567,7 @@ function test_algorithm_name()
     sol = "Limited-memory BFGS (L-BFGS) (local, derivative-based)"
     @test algorithm_name(algorithm) == sol
     @test algorithm_name(:LD_LBFGS) == sol
-    @test algorithm_name(11) == sol
+    @test algorithm_name(10) == sol
     opt = Opt(:LD_LBFGS, 2)
     @test algorithm_name(opt) == sol
     sprint(show, algorithm_name(:LD_LBFGS))
