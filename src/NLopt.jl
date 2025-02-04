@@ -8,16 +8,12 @@ module NLopt
 using CEnum: @cenum
 using NLopt_jll: libnlopt
 
-# NLopt@2.9.0 removed the LD_LBFGS_NOCEDAL enum.
-# See https://github.com/stevengj/nlopt/issues/584 for details.
-function _is_version_newer_than_2_9()
-    major, minor, bugfix = Ref{Cint}(), Ref{Cint}(), Ref{Cint}()
-    @ccall libnlopt.nlopt_version(
-        major::Ptr{Cint},
-        minor::Ptr{Cint},
-        bugfix::Ptr{Cint},
-    )::Cvoid
-    return (major[] > 2) || (major[] == 2 && minor[] >= 9)
+############################################################################
+
+function version()
+    major, minor, patch = Ref{Cint}(), Ref{Cint}(), Ref{Cint}()
+    nlopt_version(major, minor, patch)
+    return VersionNumber(major[], minor[], patch[])
 end
 
 include("libnlopt.jl")
@@ -25,7 +21,7 @@ include("libnlopt.jl")
 ############################################################################
 # Mirrors of NLopt's C enum constants:
 
-@static if _is_version_newer_than_2_9()
+@static if v"2.9" ≤ version() < v"2.10"
     @enum Algorithm::Cint begin
         GN_DIRECT = 0
         GN_DIRECT_L
@@ -37,7 +33,7 @@ include("libnlopt.jl")
         GN_ORIG_DIRECT_L
         GD_STOGO
         GD_STOGO_RAND
-        # LD_LBFGS_NOCEDAL
+        # LD_LBFGS_NOCEDAL: temporarily removed in nlopt 2.9 (nlopt#584)
         LD_LBFGS
         LN_PRAXIS
         LD_VAR1
@@ -445,12 +441,6 @@ end
 numevals(o::Opt) = nlopt_get_numevals(o)
 
 ############################################################################
-
-function version()
-    major, minor, patch = Ref{Cint}(), Ref{Cint}(), Ref{Cint}()
-    nlopt_version(major, minor, patch)
-    return VersionNumber(major[], minor[], patch[])
-end
 
 const NLOPT_VERSION = version()
 

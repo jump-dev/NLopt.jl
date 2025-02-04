@@ -16,7 +16,11 @@ const nlopt_mfunc = Ptr{Cvoid}
 # typedef void ( * nlopt_precond ) ( unsigned n , const double * x , const double * v , double * vpre , void * data )
 const nlopt_precond = Ptr{Cvoid}
 
-@static if _is_version_newer_than_2_9()
+function nlopt_version(major, minor, bugfix)
+    ccall((:nlopt_version, libnlopt), Cvoid, (Ptr{Cint}, Ptr{Cint}, Ptr{Cint}), major, minor, bugfix)
+end
+
+@static if v"2.9" ≤ version() < v"2.10"
     @cenum nlopt_algorithm::UInt32 begin
         NLOPT_GN_DIRECT = 0
         NLOPT_GN_DIRECT_L
@@ -156,10 +160,6 @@ end
 
 function nlopt_srand_time()
     ccall((:nlopt_srand_time, libnlopt), Cvoid, ())
-end
-
-function nlopt_version(major, minor, bugfix)
-    ccall((:nlopt_version, libnlopt), Cvoid, (Ptr{Cint}, Ptr{Cint}, Ptr{Cint}), major, minor, bugfix)
 end
 
 mutable struct nlopt_opt_s end
