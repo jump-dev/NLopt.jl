@@ -86,7 +86,7 @@ solution status       : XTOL_REACHED
 
 A common feature request is for a callback that can used to trace the solution
 over the iterations of the optimizer.
-    
+
 There is no native support for this in NLopt. Instead, add the callback to your
 objective function.
 
@@ -393,6 +393,72 @@ then `grad` is a matrix of size `n`&times;`m` which should (upon return) be
 set in-place (see above) to the gradient of the function with respect to the
 optimization parameters at `x`. That is, `grad[j,i]` should upon return contain
 the partial derivative &part;f<sub>`i`</sub>/&part;x<sub>`j`</sub>.
+
+A full example is:
+```julia
+julia> using NLopt
+
+julia> function my_objective_fn(x::Vector, grad::Vector)
+           if length(grad) > 0
+               grad[1] = 0
+               grad[2] = 0.5 / sqrt(x[2])
+           end
+           return sqrt(x[2])
+       end
+my_objective_fn (generic function with 1 method)
+
+julia> function my_constraint_fn(x::Vector, grad::Vector, a, b)
+           if length(grad) > 0
+               grad[1] = 3 * a * (a * x[1] + b)^2
+               grad[2] = -1
+           end
+           return (a * x[1] + b)^3 - x[2]
+       end
+my_constraint_fn (generic function with 1 method)
+
+julia> function constraints(result::Vector, x::Vector, grad::Matrix)
+           ∇g1 = [0.0, 0.0]
+           ∇g2 = [0.0, 0.0]
+           result[1] = my_constraint_fn(x, ∇g1, 2, 0)
+           result[2] = my_constraint_fn(x, ∇g2, -1, 1)
+           if length(grad) > 0
+               # Note the `.=`. You must modify `grad` in-place
+               grad .= vcat(∇g1', ∇g1')
+           end
+           return
+       end
+constraints (generic function with 2 methods)
+
+julia> opt = NLopt.Opt(:LD_MMA, 2)
+Opt(LD_MMA, 2)
+
+julia> NLopt.lower_bounds!(opt, [-Inf, 0.0])
+
+julia> NLopt.xtol_rel!(opt, 1e-6)
+
+julia> NLopt.min_objective!(opt, my_objective_fn)
+
+julia> NLopt.inequality_constraint!(opt, constraints, fill(1e-8, 2))
+
+julia> min_f, min_x, ret = NLopt.optimize(opt, [1.234, 5.678])
+(0.5443310692851157, [0.33333332182948433, 0.29629631298907744], :XTOL_REACHED)
+
+julia> num_evals = NLopt.numevals(opt)
+45
+
+julia> println(
+           """
+           objective value       : $min_f
+           solution              : $min_x
+           solution status       : $ret
+           # function evaluation : $num_evals
+           """
+       )
+objective value       : 0.5443310692851157
+solution              : [0.33333332182948433, 0.29629631298907744]
+solution status       : XTOL_REACHED
+# function evaluation : 45
+```
 
 Not all of the optimization algorithms (below) use the gradient information: for
 algorithms listed as "derivative-free," the `grad` argument will always be empty
