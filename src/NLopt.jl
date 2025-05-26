@@ -854,7 +854,7 @@ export Opt,
 else
     # declare this upfront so that the MathOptInterface extension can assign it
     # without creating a new global
-    global Optimizer
+    @eval global Optimizer
 end
 
 end # module
