@@ -82,6 +82,24 @@ solution status       : XTOL_REACHED
 # function evaluation : 11
 ```
 
+### Algorithm-specific parameters
+
+Some algorithms have algorithm-specific parameters that can be set via
+`NLopt.nlopt_set_param`. For example:
+
+```julia
+julia> import NLopt
+
+julia> opt = NLopt.Opt(:LD_MMA, 2)
+Opt(LD_MMA, 2)
+
+julia> NLopt.nlopt_set_param(opt, "inner_maxeval", 5)
+NLOPT_SUCCESS::nlopt_result = 1
+```
+
+Consult the [NLopt documentation](https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms)
+for the list of parameters supported by each algorithm.
+
 ### Trace iterations
 
 A common feature request is for a callback that can used to trace the solution
