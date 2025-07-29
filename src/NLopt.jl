@@ -453,6 +453,13 @@ srand_time() = nlopt_srand_time()
 ############################################################################
 # Objective function:
 
+const _empty_vector = Cdouble[]
+
+@inline function _get_empty_vector()
+    @assert isempty(_empty_vector) "Builtin empty vector modified by user"
+    return _empty_vector
+end
+
 function nlopt_callback_wrapper(
     n::Cuint,
     p_x::Ptr{Cdouble},
@@ -460,7 +467,7 @@ function nlopt_callback_wrapper(
     d::Callback_Data,
 )::Cdouble
     x = unsafe_wrap(Array, p_x, (n,))
-    grad = p_grad == C_NULL ? Cdouble[] : unsafe_wrap(Array, p_grad, (n,))
+    grad = p_grad == C_NULL ? _get_empty_vector() : unsafe_wrap(Array, p_grad, (n,))
     try
         return d.f(x, grad)
     catch e
@@ -526,6 +533,8 @@ end
 ############################################################################
 # Vector-valued constraints
 
+const _empty_matrix = zeros(Cdouble, 0, 0)
+
 function nlopt_vcallback_wrapper(
     m::Cuint,
     p_res::Ptr{Cdouble},
@@ -537,7 +546,7 @@ function nlopt_vcallback_wrapper(
     res = unsafe_wrap(Array, p_res, (m,))
     x = unsafe_wrap(Array, p_x, (n,))
     grad =
-        p_grad == C_NULL ? zeros(Cdouble, 0, 0) :
+        p_grad == C_NULL ? _empty_matrix :
         unsafe_wrap(Array, p_grad, (n, m))
     try
         d.f(res, x, grad)
