@@ -476,7 +476,7 @@ function nlopt_callback_wrapper(
     return NaN
 end
 
-function min_objective!(o::Opt, f::F) where F
+function min_objective!(o::Opt, f::F) where {F}
     cb = Callback_Data{F,Opt}(f, o)
     getfield(o, :cb)[1] = cb
     c_fn = @cfunction(
@@ -487,7 +487,7 @@ function min_objective!(o::Opt, f::F) where F
     return chk(o, nlopt_set_min_objective(o, c_fn, cb))
 end
 
-function max_objective!(o::Opt, f::F) where F
+function max_objective!(o::Opt, f::F) where {F}
     cb = Callback_Data{F,Opt}(f, o)
     getfield(o, :cb)[1] = cb
     c_fn = @cfunction(
@@ -501,7 +501,7 @@ end
 ############################################################################
 # Nonlinear constraints:
 
-function inequality_constraint!(o::Opt, f::F, tol::Real = 0.0) where F
+function inequality_constraint!(o::Opt, f::F, tol::Real = 0.0) where {F}
     cb = Callback_Data{F,Opt}(f, o)
     push!(getfield(o, :cb), cb)
     c_fn = @cfunction(
@@ -512,7 +512,7 @@ function inequality_constraint!(o::Opt, f::F, tol::Real = 0.0) where F
     return chk(o, nlopt_add_inequality_constraint(o, c_fn, cb, tol))
 end
 
-function equality_constraint!(o::Opt, f::F, tol::Real = 0.0) where F
+function equality_constraint!(o::Opt, f::F, tol::Real = 0.0) where {F}
     cb = Callback_Data{F,Opt}(f, o)
     push!(getfield(o, :cb), cb)
     c_fn = @cfunction(
@@ -568,42 +568,47 @@ function _catch_forced_stop(o::Opt, e)
     return
 end
 
-function inequality_constraint!(o::Opt, f::F, tol::Vector{Cdouble}) where F
+function inequality_constraint!(o::Opt, f::F, tol::Vector{Cdouble}) where {F}
     cb = Callback_Data{F,Opt}(f, o)
     push!(getfield(o, :cb), cb)
     c_fn = @cfunction(
         nlopt_vcallback_wrapper,
         Cvoid,
-        (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ref{Callback_Data{F,Opt}}),
+        (
+            Cuint,
+            Ptr{Cdouble},
+            Cuint,
+            Ptr{Cdouble},
+            Ptr{Cdouble},
+            Ref{Callback_Data{F,Opt}},
+        ),
     )
     ret = nlopt_add_inequality_mconstraint(o, length(tol), c_fn, cb, tol)
     return chk(o, ret)
 end
 
-function inequality_constraint!(
-    o::Opt,
-    f,
-    tol::AbstractVector{<:Real},
-)
+function inequality_constraint!(o::Opt, f, tol::AbstractVector{<:Real})
     return inequality_constraint!(o, f, Array{Float64}(tol))
 end
 
-function inequality_constraint!(
-    o::Opt,
-    m::Integer,
-    f,
-    tol::Real = 0.0,
-)
+function inequality_constraint!(o::Opt, m::Integer, f, tol::Real = 0.0)
     return inequality_constraint!(o, f, fill(Cdouble(tol), m))
 end
 
-function equality_constraint!(o::Opt, f::F, tol::Vector{Cdouble}) where F
+function equality_constraint!(o::Opt, f::F, tol::Vector{Cdouble}) where {F}
     cb = Callback_Data{F,Opt}(f, o)
     push!(getfield(o, :cb), cb)
     c_fn = @cfunction(
         nlopt_vcallback_wrapper,
         Cvoid,
-        (Cuint, Ptr{Cdouble}, Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ref{Callback_Data{F,Opt}}),
+        (
+            Cuint,
+            Ptr{Cdouble},
+            Cuint,
+            Ptr{Cdouble},
+            Ptr{Cdouble},
+            Ref{Callback_Data{F,Opt}},
+        ),
     )
     return chk(o, nlopt_add_equality_mconstraint(o, length(tol), c_fn, cb, tol))
 end
