@@ -456,7 +456,13 @@ srand_time() = nlopt_srand_time()
 const _EMPTY_VECTOR = Cdouble[]
 
 @inline function _get_empty_vector()
-    @assert isempty(_EMPTY_VECTOR) "Builtin empty vector modified by user"
+    if !isempty(_EMPTY_VECTOR)
+        empty!(_EMPTY_VECTOR)  # Reset for future calls
+        error(
+            "The builtin _EMPTY_VECTOR was modified by user. " *
+            "If the gradient vector is empty, do not modify it in a callback.",
+        )
+    end
     return _EMPTY_VECTOR
 end
 

@@ -687,6 +687,26 @@ function test_copy_failure()
     return
 end
 
+function test_modify_empty_vector()
+    function my_objective_fn(x::Vector, grad::Vector)
+        if isempty(grad)
+            resize!(grad, 1)
+        end
+        return (x[1] - 1.0)^2
+    end
+    opt = Opt(:LN_COBYLA, 1)
+    xtol_rel!(opt, 1e-4)
+    min_objective!(opt, my_objective_fn)
+    @test_throws(
+        ErrorException(
+            "The builtin _EMPTY_VECTOR was modified by user. If the gradient vector is empty, do not modify it in a callback.",
+        ),
+        optimize(opt, [0.0]),
+    )
+    @test isempty(NLopt._EMPTY_VECTOR)
+    return
+end
+
 end  # module
 
 TestCAPI.runtests()
