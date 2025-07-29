@@ -460,9 +460,9 @@ function nlopt_callback_wrapper(
     d::Callback_Data,
 )::Cdouble
     x = unsafe_wrap(Array, p_x, (n,))
-    grad = unsafe_wrap(Array, p_grad, (n,))
+    grad = p_grad == C_NULL ? Cdouble[] : unsafe_wrap(Array, p_grad, (n,))
     try
-        return d.f(x, p_grad == C_NULL ? Cdouble[] : grad)
+        return d.f(x, grad)
     catch e
         _catch_forced_stop(d.o, e)
     end
