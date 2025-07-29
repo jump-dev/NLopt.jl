@@ -699,7 +699,7 @@ function test_modify_empty_vector()
     min_objective!(opt, my_objective_fn)
     @test_throws(
         ErrorException(
-            "The builtin _EMPTY_VECTOR was modified by user. If the gradient vector is empty, do not modify it in a callback.",
+            "The builtin _EMPTY_VECTOR was modified by the user. If the gradient vector is empty, do not modify it in a callback.",
         ),
         optimize(opt, [0.0]),
     )

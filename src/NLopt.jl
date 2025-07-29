@@ -459,7 +459,7 @@ const _EMPTY_VECTOR = Cdouble[]
     if !isempty(_EMPTY_VECTOR)
         empty!(_EMPTY_VECTOR)  # Reset for future calls
         error(
-            "The builtin _EMPTY_VECTOR was modified by user. " *
+            "The builtin _EMPTY_VECTOR was modified by the user. " *
             "If the gradient vector is empty, do not modify it in a callback.",
         )
     end
