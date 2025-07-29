@@ -997,11 +997,10 @@ function MOI.optimize!(model::Optimizer)
         )
     end
     # Set MOI.VariablePrimalStart, clamping to bound nearest 0 if not given.
-    model.solution =
-        something.(
-            model.starting_values,
-            clamp.(0.0, model.variables.lower, model.variables.upper),
-        )
+    model.solution = something.(
+        model.starting_values,
+        clamp.(0.0, model.variables.lower, model.variables.upper),
+    )
     start_time = time()
     model.objective_value, _, model.status =
         NLopt.optimize!(model.inner, model.solution)
