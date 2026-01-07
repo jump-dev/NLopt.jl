@@ -440,12 +440,13 @@ julia> function constraints(result::Vector, x::Vector, grad::Matrix)
            result[1] = my_constraint_fn(x, ∇g1, 2, 0)
            result[2] = my_constraint_fn(x, ∇g2, -1, 1)
            if length(grad) > 0
-               # Note the `.=`. You must modify `grad` in-place
-               grad .= vcat(∇g1', ∇g1')
+               # grad has shape (num variables, num constraints)
+               grad[:, 1] .= ∇g1
+               grad[:, 2] .= ∇g2
            end
            return
        end
-constraints (generic function with 2 methods)
+constraints (generic function with 1 method)
 
 julia> opt = NLopt.Opt(:LD_MMA, 2)
 Opt(LD_MMA, 2)
@@ -459,10 +460,10 @@ julia> NLopt.min_objective!(opt, my_objective_fn)
 julia> NLopt.inequality_constraint!(opt, constraints, fill(1e-8, 2))
 
 julia> min_f, min_x, ret = NLopt.optimize(opt, [1.234, 5.678])
-(0.5443310692851157, [0.33333332182948433, 0.29629631298907744], :XTOL_REACHED)
+(0.5443310477213124, [0.3333333342139688, 0.29629628951338166], :XTOL_REACHED)
 
 julia> num_evals = NLopt.numevals(opt)
-45
+18
 
 julia> println(
            """
@@ -472,10 +473,10 @@ julia> println(
            # function evaluation : $num_evals
            """
        )
-objective value       : 0.5443310692851157
-solution              : [0.33333332182948433, 0.29629631298907744]
+objective value       : 0.5443310477213124
+solution              : [0.3333333342139688, 0.29629628951338166]
 solution status       : XTOL_REACHED
-# function evaluation : 45
+# function evaluation : 18
 ```
 
 Not all of the optimization algorithms (below) use the gradient information: for
