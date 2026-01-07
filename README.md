@@ -441,8 +441,8 @@ julia> function constraints(result::Vector, x::Vector, grad::Matrix)
            result[2] = my_constraint_fn(x, ∇g2, -1, 1)
            if length(grad) > 0
                # grad has shape (num variables, num constraints)
-               grad[:, 1] .=  ∇g1
-               grad[:, 2] .=  ∇g2
+               grad[:, 1] .= ∇g1
+               grad[:, 2] .= ∇g2
            end
            return
        end
