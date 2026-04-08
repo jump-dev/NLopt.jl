@@ -676,21 +676,30 @@ function MOI.set(
     return
 end
 
-# ArrayNonlinearFunction (from ArrayDiff)
-# The ad_backend (set via AutomaticDifferentiationBackend) is responsible for
-# building the model and evaluator — we just store the function for it.
+# Custom AbstractVectorFunction objectives (e.g., ArrayNonlinearFunction from
+# ArrayDiff).  The ad_backend (set via AutomaticDifferentiationBackend) is
+# responsible for building the evaluator — we just store the function.
+# We exclude standard MOI vector function types to avoid interfering with
+# MOI's own handling.
+
+const _MOI_VECTOR_FUNCTIONS = Union{
+    MOI.VectorOfVariables,
+    MOI.VectorAffineFunction,
+    MOI.VectorQuadraticFunction,
+    MOI.VectorNonlinearFunction,
+}
 
 function MOI.supports(
     ::Optimizer,
     ::MOI.ObjectiveFunction{F},
 ) where {F<:MOI.AbstractVectorFunction}
-    return true
+    return !(F <: _MOI_VECTOR_FUNCTIONS)
 end
 
 function MOI.set(
     model::Optimizer,
     ::MOI.ObjectiveFunction{F},
-    func::MOI.AbstractVectorFunction,
+    func::F,
 ) where {F<:MOI.AbstractVectorFunction}
     model.nlp_model = func
     return

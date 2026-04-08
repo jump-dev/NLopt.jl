@@ -361,6 +361,49 @@ function test_ListOfSupportedNonlinearOperators()
     return
 end
 
+struct _MockVectorFunction <: MOI.AbstractVectorFunction end
+MOI.output_dimension(::_MockVectorFunction) = 1
+
+function test_AbstractVectorFunction_objective_storage()
+    model = NLopt.Optimizer()
+    # Standard MOI vector functions should NOT be supported as objectives
+    @test !MOI.supports(model, MOI.ObjectiveFunction{MOI.VectorOfVariables}())
+    @test !MOI.supports(model, MOI.ObjectiveFunction{MOI.VectorAffineFunction{Float64}}())
+    # Custom AbstractVectorFunction subtype should be supported
+    @test MOI.supports(model, MOI.ObjectiveFunction{_MockVectorFunction}())
+    f = _MockVectorFunction()
+    MOI.add_variable(model)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{_MockVectorFunction}(), f)
+    @test MOI.get(model, MOI.ObjectiveFunctionType()) == _MockVectorFunction
+    @test MOI.get(model, MOI.ObjectiveFunction{_MockVectorFunction}()) === f
+    return
+end
+
+function test_ScalarNonlinearFunction_SymbolicMode()
+    # Test that the AutomaticDifferentiationBackend is used when building the
+    # evaluator. SymbolicMode is a built-in alternative to SparseReverseMode.
+    model = NLopt.Optimizer()
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_LBFGS)
+    MOI.set(
+        model,
+        MOI.AutomaticDifferentiationBackend(),
+        MOI.Nonlinear.SymbolicMode(),
+    )
+    x = MOI.add_variable(model)
+    MOI.set(model, MOI.VariablePrimalStart(), x, 2.0)
+    # min (x - 1)^2 => x* = 1
+    f = MOI.ScalarNonlinearFunction(
+        :^,
+        Any[MOI.ScalarNonlinearFunction(:-, Any[x, 1.0]), 2.0],
+    )
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction}(), f)
+    MOI.optimize!(model)
+    @test isapprox(MOI.get(model, MOI.VariablePrimal(), x), 1.0; atol = 1e-4)
+    return
+end
+
 end  # module
 
 TestMOIWrapper.runtests()
