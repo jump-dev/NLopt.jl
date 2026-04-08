@@ -31,7 +31,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
-    nlp_model::Any  # Union{Nothing, MOI.Nonlinear.Model, ...}
+    nlp_model::Any  # created by MOI.Nonlinear.nonlinear_model(ad_backend)
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
@@ -562,8 +562,11 @@ function MOI.supports(
 end
 
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
-    if model.nlp_model !== nothing && model.nlp_model.objective !== nothing
-        return MOI.ScalarNonlinearFunction
+    if model.nlp_model !== nothing
+        obj = model.nlp_model.objective
+        if obj !== nothing
+            return MOI.ScalarNonlinearFunction
+        end
     end
     return typeof(model.objective)
 end
@@ -598,7 +601,7 @@ function _init_nlp_model(model)
         if !(model.nlp_data.evaluator isa _EmptyNLPEvaluator)
             error("Cannot mix the new and legacy nonlinear APIs")
         end
-        model.nlp_model = MOI.Nonlinear.Model()
+        model.nlp_model = MOI.Nonlinear.nonlinear_model(model.ad_backend)
     end
     return
 end
