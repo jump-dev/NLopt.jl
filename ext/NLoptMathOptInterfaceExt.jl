@@ -31,7 +31,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
-    nlp_model::Union{Nothing,MOI.Nonlinear.Model}
+    nlp_model::Any  # Union{Nothing, MOI.Nonlinear.Model, ...}
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
@@ -562,13 +562,21 @@ function MOI.supports(
 end
 
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
-    if model.nlp_model !== nothing && model.nlp_model.objective !== nothing
-        return MOI.ScalarNonlinearFunction
+    if model.nlp_model isa MOI.Nonlinear.Model
+        if model.nlp_model.objective !== nothing
+            return MOI.ScalarNonlinearFunction
+        end
+    elseif model.nlp_model !== nothing
+        # AbstractVectorFunction stored directly (e.g., ArrayNonlinearFunction)
+        return typeof(model.nlp_model)
     end
     return typeof(model.objective)
 end
 
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunction{F}) where {F}
+    if model.nlp_model isa F
+        return model.nlp_model::F
+    end
     return convert(F, model.objective)::F
 end
 
@@ -665,6 +673,26 @@ function MOI.set(
 )
     _init_nlp_model(model)
     MOI.Nonlinear.set_objective(model.nlp_model, func)
+    return
+end
+
+# ArrayNonlinearFunction (from ArrayDiff)
+# The ad_backend (set via AutomaticDifferentiationBackend) is responsible for
+# building the model and evaluator — we just store the function for it.
+
+function MOI.supports(
+    ::Optimizer,
+    ::MOI.ObjectiveFunction{F},
+) where {F<:MOI.AbstractVectorFunction}
+    return true
+end
+
+function MOI.set(
+    model::Optimizer,
+    ::MOI.ObjectiveFunction{F},
+    func::MOI.AbstractVectorFunction,
+) where {F<:MOI.AbstractVectorFunction}
+    model.nlp_model = func
     return
 end
 
