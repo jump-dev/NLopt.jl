@@ -361,6 +361,30 @@ function test_ListOfSupportedNonlinearOperators()
     return
 end
 
+function test_ScalarNonlinearFunction_SymbolicMode()
+    # Test that the AutomaticDifferentiationBackend is used when building the
+    # evaluator. SymbolicMode is a built-in alternative to SparseReverseMode.
+    model = NLopt.Optimizer()
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_LBFGS)
+    MOI.set(
+        model,
+        MOI.AutomaticDifferentiationBackend(),
+        MOI.Nonlinear.SymbolicMode(),
+    )
+    x = MOI.add_variable(model)
+    MOI.set(model, MOI.VariablePrimalStart(), x, 2.0)
+    # min (x - 1)^2 => x* = 1
+    f = MOI.ScalarNonlinearFunction(
+        :^,
+        Any[MOI.ScalarNonlinearFunction(:-, Any[x, 1.0]), 2.0],
+    )
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction}(), f)
+    MOI.optimize!(model)
+    @test isapprox(MOI.get(model, MOI.VariablePrimal(), x), 1.0; atol = 1e-4)
+    return
+end
+
 end  # module
 
 TestMOIWrapper.runtests()
