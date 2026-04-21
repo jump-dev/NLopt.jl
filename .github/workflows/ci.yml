@@ -32,6 +32,13 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v1
+      - name: dev
+        shell: julia --project=@. {0}
+        run: |
+          using Pkg
+          Pkg.add([
+              PackageSpec(name="MathOptInterface", rev="bl/nonlinear_model"),
+          ])
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
