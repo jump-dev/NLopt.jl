@@ -3,6 +3,7 @@ uuid = "76087f3c-5699-56af-9a33-bf431cd00edd"
 version = "1.2.1"
 
 [deps]
+ArrayDiff = "c45fa1ca-6901-44ac-ae5b-5513a4852d50"
 CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 NLopt_jll = "079eb43e-fd8e-5478-9966-2cf3e3edb778"

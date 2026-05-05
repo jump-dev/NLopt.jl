@@ -5,6 +5,7 @@
 
 module NLoptMathOptInterfaceExt
 
+import ArrayDiff
 import MathOptInterface as MOI
 import NLopt
 
@@ -31,7 +32,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
-    nlp_model::Any  # created by MOI.Nonlinear.model(ad_backend)
+    nlp_model::Union{Nothing,MOI.Nonlinear.Model,ArrayDiff.Model}
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
@@ -598,7 +599,7 @@ function _init_nlp_model(model)
         if !(model.nlp_data.evaluator isa _EmptyNLPEvaluator)
             error("Cannot mix the new and legacy nonlinear APIs")
         end
-        model.nlp_model = MOI.Nonlinear.model(model.ad_backend)
+        model.nlp_model = ArrayDiff.model(model.ad_backend)
     end
     return
 end
