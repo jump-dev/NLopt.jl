@@ -5,7 +5,6 @@
 
 module NLoptMathOptInterfaceExt
 
-import ArrayDiff
 import MathOptInterface as MOI
 import NLopt
 
@@ -32,7 +31,10 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
-    nlp_model::Union{Nothing,MOI.Nonlinear.Model,ArrayDiff.Model}
+    # `nothing`, or the model built by `MOI.Nonlinear.model(ad_backend)`:
+    # a (possibly layered) `MOI.Nonlinear.Model` or a custom AD backend's
+    # model type.
+    nlp_model::Any
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
@@ -562,8 +564,22 @@ function MOI.supports(
     return true
 end
 
+_has_nlp_objective(::Nothing) = false
+
+_has_nlp_objective(m::MOI.Nonlinear.Model) = m.objective !== nothing
+
+# The scalar-nonlinear objective is routed to the inner model by the layers.
+_has_nlp_objective(m::MOI.Nonlinear.ModelWithQuad) = m.objective_sink == :inner
+
+function _has_nlp_objective(m::MOI.Nonlinear.ModelWithOracles)
+    return _has_nlp_objective(m.inner)
+end
+
+# Custom AD backend models, such as `ArrayDiff.Model`.
+_has_nlp_objective(m) = m.objective !== nothing
+
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
-    if model.nlp_model !== nothing && model.nlp_model.objective !== nothing
+    if _has_nlp_objective(model.nlp_model)
         return MOI.ScalarNonlinearFunction
     end
     return typeof(model.objective)
@@ -599,7 +615,7 @@ function _init_nlp_model(model)
         if !(model.nlp_data.evaluator isa _EmptyNLPEvaluator)
             error("Cannot mix the new and legacy nonlinear APIs")
         end
-        model.nlp_model = ArrayDiff.model(model.ad_backend)
+        model.nlp_model = MOI.Nonlinear.model(model.ad_backend)
     end
     return
 end
