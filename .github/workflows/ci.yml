@@ -37,7 +37,7 @@ jobs:
         run: |
           using Pkg
           Pkg.add([
-              PackageSpec(name="MathOptInterface", rev="bl/nonlinear_model"),
+              PackageSpec(name="MathOptInterface", rev="bl/linearity"),
           ])
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
