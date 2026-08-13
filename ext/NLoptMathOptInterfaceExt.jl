@@ -16,11 +16,6 @@ function __init__()
     return
 end
 
-mutable struct _ConstraintInfo{F,S}
-    func::F
-    set::S
-end
-
 """
     Optimizer()
 
@@ -34,33 +29,11 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     nlp_model::Union{Nothing,MOI.Nonlinear.Model}
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
-    objective::Union{
-        MOI.VariableIndex,
-        MOI.ScalarAffineFunction{Float64},
-        MOI.ScalarQuadraticFunction{Float64},
-        Nothing,
-    }
-    linear_le_constraints::Vector{
-        _ConstraintInfo{
-            MOI.ScalarAffineFunction{Float64},
-            MOI.LessThan{Float64},
-        },
-    }
-    linear_eq_constraints::Vector{
-        _ConstraintInfo{MOI.ScalarAffineFunction{Float64},MOI.EqualTo{Float64}},
-    }
-    quadratic_le_constraints::Vector{
-        _ConstraintInfo{
-            MOI.ScalarQuadraticFunction{Float64},
-            MOI.LessThan{Float64},
-        },
-    }
-    quadratic_eq_constraints::Vector{
-        _ConstraintInfo{
-            MOI.ScalarQuadraticFunction{Float64},
-            MOI.EqualTo{Float64},
-        },
-    }
+    # The affine and quadratic objective and constraints. `has_objective`
+    # tracks whether an objective was explicitly set, because `qp_data`
+    # defaults to a zero objective.
+    has_objective::Bool
+    qp_data::MOI.Nonlinear.QPBlockData{Float64}
     # Parameters.
     silent::Bool
     options::Dict{String,Any}
@@ -79,23 +52,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             nothing,
             MOI.Nonlinear.SparseReverseMode(),
             nothing,
-            nothing,
-            _ConstraintInfo{
-                MOI.ScalarAffineFunction{Float64},
-                MOI.LessThan{Float64},
-            }[],
-            _ConstraintInfo{
-                MOI.ScalarAffineFunction{Float64},
-                MOI.EqualTo{Float64},
-            }[],
-            _ConstraintInfo{
-                MOI.ScalarQuadraticFunction{Float64},
-                MOI.LessThan{Float64},
-            }[],
-            _ConstraintInfo{
-                MOI.ScalarQuadraticFunction{Float64},
-                MOI.EqualTo{Float64},
-            }[],
+            false,
+            MOI.Nonlinear.QPBlockData{Float64}(),
             false,
             copy(_DEFAULT_OPTIONS),
             NaN,
@@ -121,11 +79,8 @@ function MOI.empty!(model::Optimizer)
     model.nlp_data = MOI.NLPBlockData([], _EmptyNLPEvaluator(), false)
     model.nlp_model = nothing
     model.sense = nothing
-    model.objective = nothing
-    empty!(model.linear_le_constraints)
-    empty!(model.linear_eq_constraints)
-    empty!(model.quadratic_le_constraints)
-    empty!(model.quadratic_eq_constraints)
+    model.has_objective = false
+    model.qp_data = MOI.Nonlinear.QPBlockData{Float64}()
     model.status = :NOT_CALLED
     return
 end
@@ -136,10 +91,8 @@ function MOI.is_empty(model::Optimizer)
            model.nlp_data.evaluator isa _EmptyNLPEvaluator &&
            model.nlp_model === nothing &&
            model.sense == nothing &&
-           isempty(model.linear_le_constraints) &&
-           isempty(model.linear_eq_constraints) &&
-           isempty(model.quadratic_le_constraints) &&
-           isempty(model.quadratic_eq_constraints)
+           !model.has_objective &&
+           length(model.qp_data) == 0
 end
 
 function MOI.get(model::Optimizer, ::MOI.ListOfModelAttributesSet)
@@ -147,7 +100,7 @@ function MOI.get(model::Optimizer, ::MOI.ListOfModelAttributesSet)
     if model.sense !== nothing
         push!(ret, MOI.ObjectiveSense())
     end
-    if model.objective !== nothing
+    if model.has_objective
         F = MOI.get(model, MOI.ObjectiveFunctionType())
         push!(ret, MOI.ObjectiveFunction{F}())
     end
@@ -163,38 +116,6 @@ end
 MOI.get(::Optimizer, ::MOI.SolverName) = "NLopt"
 
 MOI.get(::Optimizer, ::MOI.SolverVersion) = "$(NLopt.version())"
-
-function _constraints(
-    model,
-    ::Type{<:MOI.ScalarAffineFunction},
-    ::Type{<:MOI.LessThan},
-)
-    return model.linear_le_constraints
-end
-
-function _constraints(
-    model,
-    ::Type{<:MOI.ScalarAffineFunction},
-    ::Type{<:MOI.EqualTo},
-)
-    return model.linear_eq_constraints
-end
-
-function _constraints(
-    model,
-    ::Type{<:MOI.ScalarQuadraticFunction},
-    ::Type{<:MOI.LessThan},
-)
-    return model.quadratic_le_constraints
-end
-
-function _constraints(
-    model,
-    ::Type{<:MOI.ScalarQuadraticFunction},
-    ::Type{<:MOI.EqualTo},
-)
-    return model.quadratic_eq_constraints
-end
 
 function MOI.supports_constraint(
     ::Optimizer,
@@ -219,20 +140,12 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return length(_constraints(model, F, S))
+    return MOI.get(model.qp_data, MOI.NumberOfConstraints{F,S}())
 end
 
 function MOI.get(model::Optimizer, attr::MOI.ListOfConstraintTypesPresent)
     constraints = MOI.get(model.variables, attr)
-    function _check(model, F, S)
-        if !isempty(_constraints(model, F, S))
-            push!(constraints, (F, S))
-        end
-    end
-    _check(model, MOI.ScalarAffineFunction{Float64}, MOI.LessThan{Float64})
-    _check(model, MOI.ScalarAffineFunction{Float64}, MOI.EqualTo{Float64})
-    _check(model, MOI.ScalarQuadraticFunction{Float64}, MOI.LessThan{Float64})
-    _check(model, MOI.ScalarQuadraticFunction{Float64}, MOI.EqualTo{Float64})
+    append!(constraints, MOI.get(model.qp_data, attr))
     return constraints
 end
 
@@ -246,7 +159,7 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return MOI.ConstraintIndex{F,S}.(eachindex(_constraints(model, F, S)))
+    return MOI.get(model.qp_data, MOI.ListOfConstraintIndices{F,S}())
 end
 
 function MOI.get(
@@ -260,7 +173,7 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return copy(_constraints(model, F, S)[c.value].func)
+    return MOI.get(model.qp_data, MOI.ConstraintFunction(), c)
 end
 
 function MOI.get(
@@ -274,7 +187,7 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return _constraints(model, F, S)[c.value].set
+    return MOI.get(model.qp_data, MOI.ConstraintSet(), c)
 end
 
 # ObjectiveSense
@@ -462,7 +375,7 @@ function MOI.is_valid(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return 1 <= ci.value <= length(_constraints(model, F, S))
+    return MOI.is_valid(model.qp_data, ci)
 end
 
 function _check_inbounds(model, f::MOI.VariableIndex)
@@ -499,9 +412,7 @@ function MOI.add_constraint(
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
     _check_inbounds(model, func)
-    constraints = _constraints(model, F, S)
-    push!(constraints, _ConstraintInfo(func, set))
-    return MOI.ConstraintIndex{F,S}(length(constraints))
+    return MOI.add_constraint(model.qp_data, func, set)
 end
 
 # MOI.VariablePrimalStart
@@ -564,12 +475,14 @@ end
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
     if model.nlp_model !== nothing && model.nlp_model.objective !== nothing
         return MOI.ScalarNonlinearFunction
+    elseif !model.has_objective
+        return Nothing
     end
-    return typeof(model.objective)
+    return MOI.get(model.qp_data, MOI.ObjectiveFunctionType())
 end
 
-function MOI.get(model::Optimizer, ::MOI.ObjectiveFunction{F}) where {F}
-    return convert(F, model.objective)::F
+function MOI.get(model::Optimizer, attr::MOI.ObjectiveFunction{F}) where {F}
+    return MOI.get(model.qp_data, attr)::F
 end
 
 function MOI.set(
@@ -584,7 +497,8 @@ function MOI.set(
     },
 }
     _check_inbounds(model, func)
-    model.objective = func
+    model.has_objective = true
+    MOI.set(model.qp_data, MOI.ObjectiveFunction{F}(), func)
     if model.nlp_model !== nothing
         MOI.Nonlinear.set_objective(model.nlp_model, nothing)
     end
@@ -709,78 +623,6 @@ end
 
 # optimize!
 
-function _fill_gradient(grad, x, f::MOI.VariableIndex)
-    grad[f.value] = 1.0
-    return
-end
-
-function _fill_gradient(grad, x, f::MOI.ScalarAffineFunction{Float64})
-    for term in f.terms
-        grad[term.variable.value] += term.coefficient
-    end
-    return
-end
-
-function _fill_gradient(grad, x, f::MOI.ScalarQuadraticFunction{Float64})
-    for term in f.affine_terms
-        grad[term.variable.value] += term.coefficient
-    end
-    for term in f.quadratic_terms
-        i, j = term.variable_1.value, term.variable_2.value
-        grad[i] += term.coefficient * x[j]
-        if i != j
-            grad[j] += term.coefficient * x[i]
-        end
-    end
-    return
-end
-
-function _fill_result(result::Vector, x, offset, constraints::Vector)
-    for (i, constraint) in enumerate(constraints)
-        lhs = MOI.Utilities.eval_variables(vi -> x[vi.value], constraint.func)
-        result[offset+i] = lhs - MOI.constant(constraint.set)
-    end
-    return
-end
-
-function _fill_jacobian(jac, x, offset, term::MOI.ScalarAffineTerm)
-    jac[term.variable.value, offset] += term.coefficient
-    return
-end
-
-function _fill_jacobian(jac, x, offset, term::MOI.ScalarQuadraticTerm)
-    i, j = term.variable_1.value, term.variable_2.value
-    jac[i, offset] += term.coefficient * x[j]
-    if i != j
-        jac[j, offset] += term.coefficient * x[i]
-    end
-    return
-end
-
-function _fill_jacobian(jac, x, offset, f::MOI.ScalarAffineFunction)
-    for term in f.terms
-        _fill_jacobian(jac, x, offset, term)
-    end
-    return
-end
-
-function _fill_jacobian(jac, x, offset, f::MOI.ScalarQuadraticFunction)
-    for term in f.affine_terms
-        _fill_jacobian(jac, x, offset, term)
-    end
-    for q_term in f.quadratic_terms
-        _fill_jacobian(jac, x, offset, q_term)
-    end
-    return
-end
-
-function _fill_jacobian(jac, x, offset, constraints::Vector)
-    for (i, constraint) in enumerate(constraints)
-        _fill_jacobian(jac, x, offset + i, constraint.func)
-    end
-    return
-end
-
 function objective_fn(model::Optimizer, x::Vector, grad::Vector)
     # The order of the conditions is important. NLP objectives override regular
     # objectives.
@@ -790,16 +632,16 @@ function objective_fn(model::Optimizer, x::Vector, grad::Vector)
             # nothing
         elseif model.nlp_data.has_objective
             MOI.eval_objective_gradient(model.nlp_data.evaluator, grad, x)
-        elseif model.objective !== nothing
-            _fill_gradient(grad, x, model.objective)
+        elseif model.has_objective
+            MOI.eval_objective_gradient(model.qp_data, grad, x)
         end
     end
     if model.sense == MOI.FEASIBILITY_SENSE
         return 0.0
     elseif model.nlp_data.has_objective
         return MOI.eval_objective(model.nlp_data.evaluator, x)
-    elseif model.objective !== nothing
-        return MOI.Utilities.eval_variables(vi -> x[vi.value], model.objective)
+    elseif model.has_objective
+        return MOI.eval_objective(model.qp_data, x)
     end
     # No ObjectiveFunction is set, but ObjectiveSense is?
     return 0.0
@@ -898,6 +740,22 @@ function MOI.optimize!(model::Optimizer)
     end
     Jac_val = zeros(length(Jac_IJ))
     g_vec = zeros(num_nlpblock_constraints)
+    # The affine and quadratic constraints, in the row order of `qp_data`.
+    # `LessThan` rows have a lower bound of -Inf, so a row is an equality
+    # constraint if and only if the bounds are equal.
+    qp_eq_pos, qp_le_pos = zeros(Int, length(model.qp_data)), zeros(Int, length(model.qp_data))
+    for row in 1:length(model.qp_data)
+        if model.qp_data.g_L[row] == model.qp_data.g_U[row]
+            qp_eq_pos[row] = count(!iszero, qp_eq_pos) + 1
+        else
+            qp_le_pos[row] = count(!iszero, qp_le_pos) + 1
+        end
+    end
+    num_qp_eq = count(!iszero, qp_eq_pos)
+    num_qp_le = count(!iszero, qp_le_pos)
+    qp_Jac_IJ = MOI.jacobian_structure(model.qp_data)
+    qp_Jac_val = zeros(length(qp_Jac_IJ))
+    qp_g = zeros(length(model.qp_data))
     function equality_constraint_fn(result::Vector, x::Vector, jac::Matrix)
         if length(jac) > 0
             fill!(jac, 0.0)
@@ -909,9 +767,12 @@ function MOI.optimize!(model::Optimizer)
                 end
             end
             offset = length(nonlinear_equality_indices)
-            _fill_jacobian(jac, x, offset, model.linear_eq_constraints)
-            offset += length(model.linear_eq_constraints)
-            _fill_jacobian(jac, x, offset, model.quadratic_eq_constraints)
+            MOI.eval_constraint_jacobian(model.qp_data, qp_Jac_val, x)
+            for ((row, col), val) in zip(qp_Jac_IJ, qp_Jac_val)
+                if qp_eq_pos[row] > 0
+                    jac[col, offset+qp_eq_pos[row]] += val
+                end
+            end
         end
         MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
         for (i, index) in enumerate(nonlinear_equality_indices)
@@ -919,15 +780,16 @@ function MOI.optimize!(model::Optimizer)
             result[i] = g_vec[index] - bounds.upper
         end
         offset = length(nonlinear_equality_indices)
-        _fill_result(result, x, offset, model.linear_eq_constraints)
-        offset += length(model.linear_eq_constraints)
-        _fill_result(result, x, offset, model.quadratic_eq_constraints)
+        MOI.eval_constraint(model.qp_data, qp_g, x)
+        for row in 1:length(model.qp_data)
+            if qp_eq_pos[row] > 0
+                result[offset+qp_eq_pos[row]] =
+                    qp_g[row] - model.qp_data.g_U[row]
+            end
+        end
         return
     end
-    num_equality_constraints =
-        length(nonlinear_equality_indices) +
-        length(model.linear_eq_constraints) +
-        length(model.quadratic_eq_constraints)
+    num_equality_constraints = length(nonlinear_equality_indices) + num_qp_eq
     if num_equality_constraints > 0
         NLopt.equality_constraint!(
             model.inner,
@@ -957,9 +819,12 @@ function MOI.optimize!(model::Optimizer)
                 end
             end
             offset = num_nlpblock_inequalities
-            _fill_jacobian(jac, x, offset, model.linear_le_constraints)
-            offset += length(model.linear_le_constraints)
-            _fill_jacobian(jac, x, offset, model.quadratic_le_constraints)
+            MOI.eval_constraint_jacobian(model.qp_data, qp_Jac_val, x)
+            for ((row, col), val) in zip(qp_Jac_IJ, qp_Jac_val)
+                if qp_le_pos[row] > 0
+                    jac[col, offset+qp_le_pos[row]] += val
+                end
+            end
         end
         # Fill in the result. The first entries are from NLPBlock, and the value
         # of g(x) is placed in g_vec.
@@ -979,15 +844,16 @@ function MOI.optimize!(model::Optimizer)
             end
         end
         offset = num_nlpblock_inequalities
-        _fill_result(result, x, offset, model.linear_le_constraints)
-        offset += length(model.linear_le_constraints)
-        _fill_result(result, x, offset, model.quadratic_le_constraints)
+        MOI.eval_constraint(model.qp_data, qp_g, x)
+        for row in 1:length(model.qp_data)
+            if qp_le_pos[row] > 0
+                result[offset+qp_le_pos[row]] =
+                    qp_g[row] - model.qp_data.g_U[row]
+            end
+        end
         return
     end
-    num_inequality_constraints =
-        num_nlpblock_inequalities +
-        length(model.linear_le_constraints) +
-        length(model.quadratic_le_constraints)
+    num_inequality_constraints = num_nlpblock_inequalities + num_qp_le
     if num_inequality_constraints > 0
         NLopt.inequality_constraint!(
             model.inner,
