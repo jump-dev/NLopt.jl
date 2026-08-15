@@ -502,7 +502,7 @@ function MOI.set(
 }
     _check_inbounds(model, func)
     model.has_objective = true
-    MOI.set(model.quad_data, MOI.ObjectiveFunction{F}(), func)
+    MOI.Nonlinear.set_objective(model.quad_data, func)
     return
 end
 
