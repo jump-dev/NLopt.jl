@@ -37,7 +37,7 @@ jobs:
         run: |
           using Pkg
           Pkg.add([
-              PackageSpec(name="MathOptInterface", rev="bl/qp_block_data"),
+              PackageSpec(name="MathOptInterface", rev="bl/model_with_quad"),
           ])
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
