@@ -29,11 +29,11 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     nlp_model::Union{Nothing,MOI.Nonlinear.Model}
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
-    # The affine and quadratic objective and constraints. `has_objective`
-    # tracks whether an objective was explicitly set, because `qp_data`
-    # defaults to a zero objective.
+    # The affine and quadratic objective and constraints, and the inner
+    # nonlinear model. `has_objective` tracks whether an objective was
+    # explicitly set, because the QP block defaults to a zero objective.
     has_objective::Bool
-    qp_data::MOI.Nonlinear.QPBlockData{Float64}
+    quad_data::MOI.Nonlinear.ModelWithQuad{Float64,MOI.Nonlinear.Model}
     # Parameters.
     silent::Bool
     options::Dict{String,Any}
@@ -53,7 +53,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             MOI.Nonlinear.SparseReverseMode(),
             nothing,
             false,
-            MOI.Nonlinear.QPBlockData{Float64}(),
+            MOI.Nonlinear.ModelWithQuad(MOI.Nonlinear.Model()),
             false,
             copy(_DEFAULT_OPTIONS),
             NaN,
@@ -68,6 +68,10 @@ struct _EmptyNLPEvaluator <: MOI.AbstractNLPEvaluator end
 
 MOI.initialize(::_EmptyNLPEvaluator, ::Vector{Symbol}) = nothing
 
+MOI.features_available(::_EmptyNLPEvaluator) = [:Grad, :Jac]
+
+MOI.jacobian_structure(::_EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
+
 MOI.eval_constraint(::_EmptyNLPEvaluator, g, x) = nothing
 
 MOI.eval_constraint_jacobian(::_EmptyNLPEvaluator, J, x) = nothing
@@ -80,7 +84,7 @@ function MOI.empty!(model::Optimizer)
     model.nlp_model = nothing
     model.sense = nothing
     model.has_objective = false
-    model.qp_data = MOI.Nonlinear.QPBlockData{Float64}()
+    model.quad_data = MOI.Nonlinear.ModelWithQuad(MOI.Nonlinear.Model())
     model.status = :NOT_CALLED
     return
 end
@@ -92,7 +96,7 @@ function MOI.is_empty(model::Optimizer)
            model.nlp_model === nothing &&
            model.sense == nothing &&
            !model.has_objective &&
-           length(model.qp_data) == 0
+           length(model.quad_data) == 0
 end
 
 function MOI.get(model::Optimizer, ::MOI.ListOfModelAttributesSet)
@@ -140,12 +144,12 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return MOI.get(model.qp_data, MOI.NumberOfConstraints{F,S}())
+    return MOI.get(model.quad_data, MOI.NumberOfConstraints{F,S}())
 end
 
 function MOI.get(model::Optimizer, attr::MOI.ListOfConstraintTypesPresent)
     constraints = MOI.get(model.variables, attr)
-    append!(constraints, MOI.get(model.qp_data, attr))
+    append!(constraints, MOI.get(model.quad_data, attr))
     return constraints
 end
 
@@ -159,7 +163,7 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return MOI.get(model.qp_data, MOI.ListOfConstraintIndices{F,S}())
+    return MOI.get(model.quad_data, MOI.ListOfConstraintIndices{F,S}())
 end
 
 function MOI.get(
@@ -173,7 +177,7 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return MOI.get(model.qp_data, MOI.ConstraintFunction(), c)
+    return MOI.get(model.quad_data, MOI.ConstraintFunction(), c)
 end
 
 function MOI.get(
@@ -187,7 +191,7 @@ function MOI.get(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return MOI.get(model.qp_data, MOI.ConstraintSet(), c)
+    return MOI.get(model.quad_data, MOI.ConstraintSet(), c)
 end
 
 # ObjectiveSense
@@ -375,7 +379,7 @@ function MOI.is_valid(
     },
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
-    return MOI.is_valid(model.qp_data, ci)
+    return MOI.is_valid(model.quad_data, ci)
 end
 
 function _check_inbounds(model, f::MOI.VariableIndex)
@@ -412,7 +416,7 @@ function MOI.add_constraint(
     S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}},
 }
     _check_inbounds(model, func)
-    return MOI.add_constraint(model.qp_data, func, set)
+    return MOI.add_constraint(model.quad_data, func, set)
 end
 
 # MOI.VariablePrimalStart
@@ -478,11 +482,11 @@ function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
     elseif !model.has_objective
         return Nothing
     end
-    return MOI.get(model.qp_data, MOI.ObjectiveFunctionType())
+    return MOI.get(model.quad_data, MOI.ObjectiveFunctionType())
 end
 
 function MOI.get(model::Optimizer, attr::MOI.ObjectiveFunction{F}) where {F}
-    return MOI.get(model.qp_data, attr)::F
+    return MOI.get(model.quad_data, attr)::F
 end
 
 function MOI.set(
@@ -498,10 +502,7 @@ function MOI.set(
 }
     _check_inbounds(model, func)
     model.has_objective = true
-    MOI.set(model.qp_data, MOI.ObjectiveFunction{F}(), func)
-    if model.nlp_model !== nothing
-        MOI.Nonlinear.set_objective(model.nlp_model, nothing)
-    end
+    MOI.set(model.quad_data, MOI.ObjectiveFunction{F}(), func)
     return
 end
 
@@ -512,7 +513,7 @@ function _init_nlp_model(model)
         if !(model.nlp_data.evaluator isa _EmptyNLPEvaluator)
             error("Cannot mix the new and legacy nonlinear APIs")
         end
-        model.nlp_model = MOI.Nonlinear.Model()
+        model.nlp_model = model.quad_data.inner
     end
     return
 end
@@ -578,7 +579,7 @@ function MOI.set(
     func::MOI.ScalarNonlinearFunction,
 )
     _init_nlp_model(model)
-    MOI.Nonlinear.set_objective(model.nlp_model, func)
+    MOI.Nonlinear.set_objective(model.quad_data, func)
     return
 end
 
@@ -623,28 +624,28 @@ end
 
 # optimize!
 
-function objective_fn(model::Optimizer, x::Vector, grad::Vector)
-    # The order of the conditions is important. NLP objectives override regular
-    # objectives.
+function objective_fn(model::Optimizer, evaluator, x::Vector, grad::Vector)
+    # The objective sink of `evaluator` routes between the QP block and the
+    # inner nonlinear model, and evaluates to zero if no objective is set. A
+    # legacy NLPBlock objective is evaluated directly, because the sink does
+    # not know about it.
+    legacy_nlp = model.nlp_model === nothing && model.nlp_data.has_objective
     if length(grad) > 0
         fill!(grad, 0.0)
         if model.sense == MOI.FEASIBILITY_SENSE
             # nothing
-        elseif model.nlp_data.has_objective
+        elseif legacy_nlp
             MOI.eval_objective_gradient(model.nlp_data.evaluator, grad, x)
-        elseif model.has_objective
-            MOI.eval_objective_gradient(model.qp_data, grad, x)
+        else
+            MOI.eval_objective_gradient(evaluator, grad, x)
         end
     end
     if model.sense == MOI.FEASIBILITY_SENSE
         return 0.0
-    elseif model.nlp_data.has_objective
+    elseif legacy_nlp
         return MOI.eval_objective(model.nlp_data.evaluator, x)
-    elseif model.has_objective
-        return MOI.eval_objective(model.qp_data, x)
     end
-    # No ObjectiveFunction is set, but ObjectiveSense is?
-    return 0.0
+    return MOI.eval_objective(evaluator, x)
 end
 
 function _initialize_options!(model::Optimizer)
@@ -689,111 +690,91 @@ function MOI.optimize!(model::Optimizer)
     num_variables = length(model.starting_values)
     model.inner = NLopt.Opt(model.options["algorithm"], num_variables)
     _initialize_options!(model)
+    vars = MOI.VariableIndex.(1:num_variables)
     if model.nlp_model !== nothing
-        vars = MOI.VariableIndex.(1:num_variables)
         model.nlp_data = MOI.NLPBlockData(
             MOI.Nonlinear.Evaluator(model.nlp_model, model.ad_backend, vars),
         )
     end
+    # One evaluator for the whole model: the rows of the QP block come first,
+    # followed by the rows of `model.nlp_data`.
+    evaluator = MOI.Nonlinear.EvaluatorWithQuad(
+        model.quad_data,
+        model.nlp_data.evaluator,
+        vars,
+    )
+    constraint_bounds = vcat(
+        MOI.NLPBoundsPair.(model.quad_data.qp.g_L, model.quad_data.qp.g_U),
+        model.nlp_data.constraint_bounds,
+    )
+    num_constraints = length(constraint_bounds)
     NLopt.lower_bounds!(model.inner, model.variables.lower)
     NLopt.upper_bounds!(model.inner, model.variables.upper)
-    nonlinear_equality_indices = findall(
-        bound -> bound.lower == bound.upper,
-        model.nlp_data.constraint_bounds,
-    )
-    nonlinear_inequality_indices = findall(
-        bound -> bound.lower != bound.upper,
-        model.nlp_data.constraint_bounds,
-    )
-    num_nlpblock_constraints = length(model.nlp_data.constraint_bounds)
+    equality_indices =
+        findall(bound -> bound.lower == bound.upper, constraint_bounds)
+    inequality_indices =
+        findall(bound -> bound.lower != bound.upper, constraint_bounds)
     # map from eqidx/ineqidx to index in equalities/inequalities
-    constrmap = zeros(Int, num_nlpblock_constraints)
-    for (i, k) in enumerate(nonlinear_equality_indices)
+    constrmap = zeros(Int, num_constraints)
+    for (i, k) in enumerate(equality_indices)
         constrmap[k] = i
     end
-    num_nlpblock_inequalities = 0
-    for (i, k) in enumerate(nonlinear_inequality_indices)
-        num_nlpblock_inequalities += 1
-        constrmap[k] = num_nlpblock_inequalities
-        bounds = model.nlp_data.constraint_bounds[k]
+    num_inequalities = 0
+    for k in inequality_indices
+        num_inequalities += 1
+        constrmap[k] = num_inequalities
+        bounds = constraint_bounds[k]
         if !isinf(bounds.lower) && !isinf(bounds.upper)
             # constraint has bounds on both sides, keep room for it
-            num_nlpblock_inequalities += 1
+            num_inequalities += 1
         end
     end
     if string(model.options["algorithm"])[2] == 'N'
         # Derivative free optimizer chosen
-        MOI.initialize(model.nlp_data.evaluator, Symbol[])
-    elseif num_nlpblock_constraints > 0
-        MOI.initialize(model.nlp_data.evaluator, [:Grad, :Jac])
+        MOI.initialize(evaluator, Symbol[])
+    elseif num_constraints > 0
+        MOI.initialize(evaluator, [:Grad, :Jac])
     else
-        MOI.initialize(model.nlp_data.evaluator, [:Grad])
+        MOI.initialize(evaluator, [:Grad])
     end
     if model.sense == MOI.MAX_SENSE
-        NLopt.max_objective!(model.inner, (x, g) -> objective_fn(model, x, g))
+        NLopt.max_objective!(
+            model.inner,
+            (x, g) -> objective_fn(model, evaluator, x, g),
+        )
     else
-        NLopt.min_objective!(model.inner, (x, g) -> objective_fn(model, x, g))
+        NLopt.min_objective!(
+            model.inner,
+            (x, g) -> objective_fn(model, evaluator, x, g),
+        )
     end
     Jac_IJ = Tuple{Int,Int}[]
-    if num_nlpblock_constraints > 0
-        append!(Jac_IJ, MOI.jacobian_structure(model.nlp_data.evaluator))
+    if num_constraints > 0
+        append!(Jac_IJ, MOI.jacobian_structure(evaluator))
     end
     Jac_val = zeros(length(Jac_IJ))
-    g_vec = zeros(num_nlpblock_constraints)
-    # The affine and quadratic constraints, in the row order of `qp_data`.
-    # `LessThan` rows have a lower bound of -Inf, so a row is an equality
-    # constraint if and only if the bounds are equal.
-    qp_eq_pos, qp_le_pos = zeros(Int, length(model.qp_data)), zeros(Int, length(model.qp_data))
-    for row in 1:length(model.qp_data)
-        if model.qp_data.g_L[row] == model.qp_data.g_U[row]
-            qp_eq_pos[row] = count(!iszero, qp_eq_pos) + 1
-        else
-            qp_le_pos[row] = count(!iszero, qp_le_pos) + 1
-        end
-    end
-    num_qp_eq = count(!iszero, qp_eq_pos)
-    num_qp_le = count(!iszero, qp_le_pos)
-    qp_Jac_IJ = MOI.jacobian_structure(model.qp_data)
-    qp_Jac_val = zeros(length(qp_Jac_IJ))
-    qp_g = zeros(length(model.qp_data))
+    g_vec = zeros(num_constraints)
     function equality_constraint_fn(result::Vector, x::Vector, jac::Matrix)
         if length(jac) > 0
             fill!(jac, 0.0)
-            MOI.eval_constraint_jacobian(model.nlp_data.evaluator, Jac_val, x)
+            MOI.eval_constraint_jacobian(evaluator, Jac_val, x)
             for ((row, col), val) in zip(Jac_IJ, Jac_val)
-                bounds = model.nlp_data.constraint_bounds[row]
+                bounds = constraint_bounds[row]
                 if bounds.lower == bounds.upper
                     jac[col, constrmap[row]] += val
                 end
             end
-            offset = length(nonlinear_equality_indices)
-            MOI.eval_constraint_jacobian(model.qp_data, qp_Jac_val, x)
-            for ((row, col), val) in zip(qp_Jac_IJ, qp_Jac_val)
-                if qp_eq_pos[row] > 0
-                    jac[col, offset+qp_eq_pos[row]] += val
-                end
-            end
         end
-        MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
-        for (i, index) in enumerate(nonlinear_equality_indices)
-            bounds = model.nlp_data.constraint_bounds[index]
-            result[i] = g_vec[index] - bounds.upper
-        end
-        offset = length(nonlinear_equality_indices)
-        MOI.eval_constraint(model.qp_data, qp_g, x)
-        for row in 1:length(model.qp_data)
-            if qp_eq_pos[row] > 0
-                result[offset+qp_eq_pos[row]] =
-                    qp_g[row] - model.qp_data.g_U[row]
-            end
+        MOI.eval_constraint(evaluator, g_vec, x)
+        for (i, index) in enumerate(equality_indices)
+            result[i] = g_vec[index] - constraint_bounds[index].upper
         end
         return
     end
-    num_equality_constraints = length(nonlinear_equality_indices) + num_qp_eq
-    if num_equality_constraints > 0
+    if length(equality_indices) > 0
         NLopt.equality_constraint!(
             model.inner,
-            num_equality_constraints,
+            length(equality_indices),
             equality_constraint_fn,
             model.options["constrtol_abs"],
         )
@@ -804,9 +785,9 @@ function MOI.optimize!(model::Optimizer)
     function inequality_constraint_fn(result::Vector, x::Vector, jac::Matrix)
         if length(jac) > 0
             fill!(jac, 0.0)
-            MOI.eval_constraint_jacobian(model.nlp_data.evaluator, Jac_val, x)
+            MOI.eval_constraint_jacobian(evaluator, Jac_val, x)
             for ((row, col), val) in zip(Jac_IJ, Jac_val)
-                bounds = model.nlp_data.constraint_bounds[row]
+                bounds = constraint_bounds[row]
                 if bounds.lower == bounds.upper
                     continue  # This is an equality constraint
                 elseif isinf(bounds.lower)  # upper bound
@@ -818,20 +799,11 @@ function MOI.optimize!(model::Optimizer)
                     jac[col, constrmap[row]+1] -= val
                 end
             end
-            offset = num_nlpblock_inequalities
-            MOI.eval_constraint_jacobian(model.qp_data, qp_Jac_val, x)
-            for ((row, col), val) in zip(qp_Jac_IJ, qp_Jac_val)
-                if qp_le_pos[row] > 0
-                    jac[col, offset+qp_le_pos[row]] += val
-                end
-            end
         end
-        # Fill in the result. The first entries are from NLPBlock, and the value
-        # of g(x) is placed in g_vec.
-        MOI.eval_constraint(model.nlp_data.evaluator, g_vec, x)
-        for row in 1:num_nlpblock_constraints
+        MOI.eval_constraint(evaluator, g_vec, x)
+        for row in 1:num_constraints
             index = constrmap[row]
-            bounds = model.nlp_data.constraint_bounds[row]
+            bounds = constraint_bounds[row]
             if bounds.lower == bounds.upper
                 continue  # This is an equality constraint
             elseif isinf(bounds.lower)  # g(x) <= u --> g(x) - u <= 0
@@ -843,21 +815,12 @@ function MOI.optimize!(model::Optimizer)
                 result[index+1] = bounds.lower - g_vec[row]
             end
         end
-        offset = num_nlpblock_inequalities
-        MOI.eval_constraint(model.qp_data, qp_g, x)
-        for row in 1:length(model.qp_data)
-            if qp_le_pos[row] > 0
-                result[offset+qp_le_pos[row]] =
-                    qp_g[row] - model.qp_data.g_U[row]
-            end
-        end
         return
     end
-    num_inequality_constraints = num_nlpblock_inequalities + num_qp_le
-    if num_inequality_constraints > 0
+    if num_inequalities > 0
         NLopt.inequality_constraint!(
             model.inner,
-            num_inequality_constraints,
+            num_inequalities,
             inequality_constraint_fn,
             model.options["constrtol_abs"],
         )
