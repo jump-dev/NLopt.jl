@@ -320,6 +320,13 @@ function test_invalid_algorithms()
     return
 end
 
+function test_public_algorithm_and_opt_docs()
+    docs = Base.Docs.meta(NLopt)
+    @test haskey(docs, Base.Docs.Binding(NLopt, :Algorithm))
+    @test haskey(docs, Base.Docs.Binding(NLopt, :Opt))
+    return
+end
+
 function test_issue_133()
     function rosenbrock(x::Vector, grad::Vector)
         if length(grad) > 0
