@@ -117,8 +117,11 @@ else
     end
 end
 
-@doc """
-    Algorithm
+Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
+Base.convert(::Type{Algorithm}, r::nlopt_algorithm) = Algorithm(Int(r))
+
+"""
+    Algorithm(name::Symbol)::Algorithm
 
 An NLopt optimization algorithm identifier.
 
@@ -131,9 +134,9 @@ linked NLopt library. Construct an algorithm from its NLopt symbol with
 - `name::Symbol`: An NLopt algorithm symbol, such as `:LD_LBFGS` or
   `:LN_COBYLA`.
 
-`Algorithm(name)` throws an `ArgumentError` when `name` is not recognized by
-NLopt. The set of available enum values can differ when NLopt changes its
-algorithm list; use `algorithm_name` to obtain NLopt's display name.
+## Throws
+
+- `ArgumentError`: when `Algorithm(name)` is not recognized by NLopt.
 
 ## Example
 
@@ -141,11 +144,7 @@ algorithm list; use `algorithm_name` to obtain NLopt's display name.
 julia> algorithm = Algorithm(:LD_LBFGS)
 LD_LBFGS
 ```
-""" Algorithm
-
-Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
-Base.convert(::Type{Algorithm}, r::nlopt_algorithm) = Algorithm(Int(r))
-
+"""
 function Algorithm(name::Symbol)::Algorithm
     algorithm = nlopt_algorithm_from_string("$name")
     if UInt32(algorithm) == 0xffffffff
@@ -201,7 +200,7 @@ function Base.unsafe_convert(::Type{Ptr{Cvoid}}, c::Callback_Data)
 end
 
 """
-    Opt(algorithm, n)
+    Opt(algorithm::Union{Algorithm,Integer,Symbol}, n::Integer)
 
 An NLopt optimization object for an `n`-dimensional decision vector.
 
@@ -214,17 +213,6 @@ call [`destroy`](@ref) when deterministic release is needed.
 - `algorithm::Algorithm`, `Symbol`, or `Integer`: The NLopt algorithm. A
   symbol is converted with [`Algorithm`](@ref).
 - `n::Integer`: Number of decision variables. It must be nonnegative.
-
-## Fields
-
-- `opt::Ptr{Cvoid}`: The owned NLopt library handle.
-- `cb::Vector{Callback_Data}`: Objective and constraint callback state kept
-  alive for the lifetime of the optimization object.
-- `exception::Any`: A callback exception saved until NLopt returns control to
-  Julia.
-- `x_cache`, `res_cache`, `grad_cache`, `grad2_cache`: Callback work buffers.
-  These are internal implementation details and should not be accessed or
-  mutated by users.
 
 ## Throws
 
