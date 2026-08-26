@@ -117,6 +117,32 @@ else
     end
 end
 
+@doc """
+    Algorithm
+
+An NLopt optimization algorithm identifier.
+
+`Algorithm` is an enum whose values mirror the algorithms provided by the
+linked NLopt library. Construct an algorithm from its NLopt symbol with
+`Algorithm(name)`.
+
+## Arguments
+
+- `name::Symbol`: An NLopt algorithm symbol, such as `:LD_LBFGS` or
+  `:LN_COBYLA`.
+
+`Algorithm(name)` throws an `ArgumentError` when `name` is not recognized by
+NLopt. The set of available enum values can differ when NLopt changes its
+algorithm list; use `algorithm_name` to obtain NLopt's display name.
+
+## Example
+
+```julia
+julia> algorithm = Algorithm(:LD_LBFGS)
+LD_LBFGS
+```
+""" Algorithm
+
 Base.convert(::Type{nlopt_algorithm}, a::Algorithm) = nlopt_algorithm(Int(a))
 Base.convert(::Type{Algorithm}, r::nlopt_algorithm) = Algorithm(Int(r))
 
@@ -174,6 +200,45 @@ function Base.unsafe_convert(::Type{Ptr{Cvoid}}, c::Callback_Data)
     return pointer_from_objref(c)
 end
 
+"""
+    Opt(algorithm, n)
+
+An NLopt optimization object for an `n`-dimensional decision vector.
+
+`Opt` owns an NLopt library handle and the callback data registered on that
+handle. Its finalizer releases the native handle when the object is collected;
+call [`destroy`](@ref) when deterministic release is needed.
+
+## Arguments
+
+- `algorithm::Algorithm`, `Symbol`, or `Integer`: The NLopt algorithm. A
+  symbol is converted with [`Algorithm`](@ref).
+- `n::Integer`: Number of decision variables. It must be nonnegative.
+
+## Fields
+
+- `opt::Ptr{Cvoid}`: The owned NLopt library handle.
+- `cb::Vector{Callback_Data}`: Objective and constraint callback state kept
+  alive for the lifetime of the optimization object.
+- `exception::Any`: A callback exception saved until NLopt returns control to
+  Julia.
+- `x_cache`, `res_cache`, `grad_cache`, `grad2_cache`: Callback work buffers.
+  These are internal implementation details and should not be accessed or
+  mutated by users.
+
+## Throws
+
+- `ArgumentError`: `n` is negative or a symbolic algorithm name is unknown.
+
+## Example
+
+```julia
+julia> opt = Opt(:LD_LBFGS, 2);
+
+julia> algorithm(opt), ndims(opt)
+(LD_LBFGS, 2)
+```
+"""
 mutable struct Opt
     opt::Ptr{Cvoid}
 
