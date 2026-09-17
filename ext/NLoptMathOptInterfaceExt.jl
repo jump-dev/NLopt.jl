@@ -31,7 +31,10 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     variables::MOI.Utilities.VariablesContainer{Float64}
     starting_values::Vector{Union{Nothing,Float64}}
     nlp_data::MOI.NLPBlockData
-    nlp_model::Union{Nothing,MOI.Nonlinear.Model}
+    # `nothing`, or the model built by `MOI.Nonlinear.model(ad_backend)`:
+    # a (possibly layered) `MOI.Nonlinear.Model` or a custom AD backend's
+    # model type.
+    nlp_model::Any
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     objective::Union{
@@ -561,8 +564,28 @@ function MOI.supports(
     return true
 end
 
+_has_nlp_objective(::Nothing) = false
+
+_has_nlp_objective(m::MOI.Nonlinear.Model) = m.objective !== nothing
+
+# Custom AD backend models, such as `ArrayDiff.Model`.
+_has_nlp_objective(m) = m.objective !== nothing
+
+# The layered models only exist on MathOptInterface#bl/linearity. Define the
+# methods conditionally so that this branch also loads with a released
+# MathOptInterface, in which `MOI.Nonlinear.Model` is the only model type.
+if isdefined(MOI.Nonlinear, :ModelWithQuad)
+    # The scalar-nonlinear objective is routed to the inner model by the layers.
+    @eval function _has_nlp_objective(m::MOI.Nonlinear.ModelWithQuad)
+        return m.objective_sink == :inner
+    end
+    @eval function _has_nlp_objective(m::MOI.Nonlinear.ModelWithOracles)
+        return _has_nlp_objective(m.inner)
+    end
+end
+
 function MOI.get(model::Optimizer, ::MOI.ObjectiveFunctionType)
-    if model.nlp_model !== nothing && model.nlp_model.objective !== nothing
+    if _has_nlp_objective(model.nlp_model)
         return MOI.ScalarNonlinearFunction
     end
     return typeof(model.objective)
@@ -593,12 +616,28 @@ end
 
 # ScalarNonlinearFunction
 
+if isdefined(MOI.Nonlinear, :model)
+    _nonlinear_model(backend) = MOI.Nonlinear.model(backend)
+else
+    # `MOI.Nonlinear.model` only exists on MathOptInterface#bl/linearity. Until
+    # it lands, a custom AD backend is expected to define `model` in its own
+    # package, as ArrayDiff does with `ArrayDiff.model(::ArrayDiff.Mode)`, while
+    # MOI's own backends all use `MOI.Nonlinear.Model`.
+    function _nonlinear_model(backend)
+        M = parentmodule(typeof(backend))
+        if isdefined(M, :model)
+            return M.model(backend)
+        end
+        return MOI.Nonlinear.Model()
+    end
+end
+
 function _init_nlp_model(model)
     if model.nlp_model === nothing
         if !(model.nlp_data.evaluator isa _EmptyNLPEvaluator)
             error("Cannot mix the new and legacy nonlinear APIs")
         end
-        model.nlp_model = MOI.Nonlinear.Model()
+        model.nlp_model = _nonlinear_model(model.ad_backend)
     end
     return
 end
