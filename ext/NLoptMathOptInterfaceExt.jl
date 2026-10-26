@@ -31,6 +31,9 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     # Whether `nlp_data` was set through the legacy `MOI.NLPBlock` API, in
     # which case it must not be rebuilt from the inner nonlinear model.
     uses_nlp_block::Bool
+    # Track API use separately from the inner model, whose objective sense
+    # can change when setting an affine or quadratic objective.
+    uses_nonlinear_api::Bool
     ad_backend::MOI.Nonlinear.AbstractAutomaticDifferentiation
     sense::Union{Nothing,MOI.OptimizationSense}
     # Whether an objective was explicitly set, because the QP block defaults
@@ -51,6 +54,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             MOI.Nonlinear.ModelWithQuad(MOI.Nonlinear.Model()),
             Union{Nothing,Float64}[],
             MOI.NLPBlockData([], _EmptyNLPEvaluator(), false),
+            false,
             false,
             MOI.Nonlinear.SparseReverseMode(),
             nothing,
@@ -83,6 +87,7 @@ function MOI.empty!(model::Optimizer)
     empty!(model.starting_values)
     model.nlp_data = MOI.NLPBlockData([], _EmptyNLPEvaluator(), false)
     model.uses_nlp_block = false
+    model.uses_nonlinear_api = false
     model.sense = nothing
     model.has_objective = false
     model.status = :NOT_CALLED
@@ -454,7 +459,7 @@ end
 MOI.supports(::Optimizer, ::MOI.NLPBlock) = true
 
 function MOI.set(model::Optimizer, ::MOI.NLPBlock, nlp_data::MOI.NLPBlockData)
-    if !MOI.is_empty(model.model.inner)
+    if model.uses_nonlinear_api
         error("Cannot mix the new and legacy nonlinear APIs")
     end
     model.nlp_data = nlp_data
@@ -560,6 +565,7 @@ function MOI.add_constraint(
 )
     _check_no_nlp_block(model)
     index = MOI.Nonlinear.add_constraint(model.model.inner, f, set)
+    model.uses_nonlinear_api = true
     return MOI.ConstraintIndex{typeof(f),typeof(set)}(index.value)
 end
 
@@ -577,6 +583,8 @@ function MOI.set(
 )
     _check_no_nlp_block(model)
     MOI.Nonlinear.set_objective(model.model, func)
+    model.uses_nonlinear_api = true
+    model.has_objective = true
     return
 end
 
@@ -609,6 +617,7 @@ function MOI.set(model::Optimizer, attr::MOI.UserDefinedFunction, args)
         attr.arity,
         args...,
     )
+    model.uses_nonlinear_api = true
     return
 end
 
