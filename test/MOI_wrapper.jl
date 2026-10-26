@@ -224,6 +224,87 @@ function test_get_objective_function()
     return
 end
 
+function test_NLPBlock_with_objective()
+    for algorithm in (:LD_SLSQP, :LN_COBYLA),
+        (objective, objective_value) in (
+            (identity, 1.0),
+            (x -> 2.0 * x + 1.0, 3.0),
+            (x -> 1.0 * x * x + 2.0 * x + 1.0, 4.0),
+        ),
+        objective_first in (true, false),
+        has_nlp_objective in (true, false)
+
+        model = NLopt.Optimizer()
+        MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), algorithm)
+        x = MOI.add_variable(model)
+        MOI.set(model, MOI.VariablePrimalStart(), x, 1.5)
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        block = MOI.NLPBlockData(
+            [MOI.NLPBoundsPair(1.0, 1.0)],
+            MOI.Test.FeasibilitySenseEvaluator(false),
+            has_nlp_objective,
+        )
+        f = objective(x)
+        F = typeof(f)
+        if objective_first
+            MOI.set(model, MOI.ObjectiveFunction{F}(), f)
+            MOI.set(model, MOI.NLPBlock(), block)
+        else
+            MOI.set(model, MOI.NLPBlock(), block)
+            MOI.set(model, MOI.ObjectiveFunction{F}(), f)
+        end
+        @test MOI.get(model, MOI.ObjectiveFunctionType()) == F
+        @test isapprox(MOI.get(model, MOI.ObjectiveFunction{F}()), f)
+        MOI.optimize!(model)
+        @test MOI.get(model, MOI.TerminationStatus()) == MOI.LOCALLY_SOLVED
+        @test isapprox(
+            MOI.get(model, MOI.VariablePrimal(), x),
+            1.0;
+            atol = 1e-4,
+        )
+        expected_objective = has_nlp_objective ? 0.0 : objective_value
+        @test isapprox(
+            MOI.get(model, MOI.ObjectiveValue()),
+            expected_objective;
+            atol = 1e-4,
+        )
+    end
+    return
+end
+
+function test_NLPBlock_mix_apis()
+    for setter in (
+        (model, x) -> MOI.set(
+            model,
+            MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction}(),
+            MOI.ScalarNonlinearFunction(:sin, Any[x]),
+        ),
+        (model, x) -> MOI.set(model, MOI.UserDefinedFunction(:f, 1), (sin,)),
+    )
+        model = NLopt.Optimizer()
+        x = MOI.add_variable(model)
+        block = MOI.NLPBlockData(
+            [MOI.NLPBoundsPair(1.0, 1.0)],
+            MOI.Test.FeasibilitySenseEvaluator(false),
+            true,
+        )
+        setter(model, x)
+        @test_throws(
+            ErrorException("Cannot mix the new and legacy nonlinear APIs"),
+            MOI.set(model, MOI.NLPBlock(), block),
+        )
+        MOI.empty!(model)
+        @test MOI.is_empty(model)
+        x = MOI.add_variable(model)
+        MOI.set(model, MOI.NLPBlock(), block)
+        @test_throws(
+            ErrorException("Cannot mix the new and legacy nonlinear APIs"),
+            setter(model, x),
+        )
+    end
+    return
+end
+
 function test_ScalarNonlinearFunction_mix_apis_nlpblock_last()
     model = NLopt.Optimizer()
     x = MOI.add_variable(model)
@@ -274,6 +355,11 @@ function test_ScalarNonlinearFunction_ObjectiveFunctionType()
     F = MOI.ScalarNonlinearFunction
     MOI.set(model, MOI.ObjectiveFunction{F}(), f)
     @test MOI.get(model, MOI.ObjectiveFunctionType()) == F
+    @test MOI.get(model, MOI.ListOfModelAttributesSet()) ==
+          MOI.AbstractModelAttribute[
+        MOI.ObjectiveSense(),
+        MOI.ObjectiveFunction{F}(),
+    ]
     return
 end
 
