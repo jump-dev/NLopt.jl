@@ -27,10 +27,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     # the inner nonlinear model.
     model::MOI.Nonlinear.ModelWithQuad{Float64,MOI.Nonlinear.Model}
     starting_values::Vector{Union{Nothing,Float64}}
-    nlp_data::MOI.NLPBlockData
-    # Whether `nlp_data` was set through the legacy `MOI.NLPBlock` API, in
-    # which case it must not be rebuilt from the inner nonlinear model.
-    uses_nlp_block::Bool
+    # Legacy nonlinear data supplied through `MOI.NLPBlock`, if any.
+    nlp_data::Union{Nothing,MOI.NLPBlockData}
     # Track API use separately from the inner model, whose objective sense
     # can change when setting an affine or quadratic objective.
     uses_nonlinear_api::Bool
@@ -53,8 +51,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             nothing,
             MOI.Nonlinear.ModelWithQuad(MOI.Nonlinear.Model()),
             Union{Nothing,Float64}[],
-            MOI.NLPBlockData([], _EmptyNLPEvaluator(), false),
-            false,
+            nothing,
             false,
             MOI.Nonlinear.SparseReverseMode(),
             nothing,
@@ -69,24 +66,11 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     end
 end
 
-struct _EmptyNLPEvaluator <: MOI.AbstractNLPEvaluator end
-
-MOI.initialize(::_EmptyNLPEvaluator, ::Vector{Symbol}) = nothing
-
-MOI.features_available(::_EmptyNLPEvaluator) = [:Grad, :Jac]
-
-MOI.jacobian_structure(::_EmptyNLPEvaluator) = Tuple{Int64,Int64}[]
-
-MOI.eval_constraint(::_EmptyNLPEvaluator, g, x) = nothing
-
-MOI.eval_constraint_jacobian(::_EmptyNLPEvaluator, J, x) = nothing
-
 function MOI.empty!(model::Optimizer)
     model.inner = nothing
     model.model = MOI.Nonlinear.ModelWithQuad(MOI.Nonlinear.Model())
     empty!(model.starting_values)
-    model.nlp_data = MOI.NLPBlockData([], _EmptyNLPEvaluator(), false)
-    model.uses_nlp_block = false
+    model.nlp_data = nothing
     model.uses_nonlinear_api = false
     model.sense = nothing
     model.has_objective = false
@@ -97,7 +81,7 @@ end
 function MOI.is_empty(model::Optimizer)
     return MOI.is_empty(model.model.variables) &&
            isempty(model.starting_values) &&
-           !model.uses_nlp_block &&
+           model.nlp_data === nothing &&
            MOI.is_empty(model.model.inner) &&
            model.sense == nothing &&
            !model.has_objective &&
@@ -463,7 +447,6 @@ function MOI.set(model::Optimizer, ::MOI.NLPBlock, nlp_data::MOI.NLPBlockData)
         error("Cannot mix the new and legacy nonlinear APIs")
     end
     model.nlp_data = nlp_data
-    model.uses_nlp_block = !(nlp_data.evaluator isa _EmptyNLPEvaluator)
     return
 end
 
@@ -517,7 +500,7 @@ end
 # The nonlinear model is `model.model.inner` and always exists; this guard
 # only rejects mixing it with the legacy `MOI.NLPBlock` API.
 function _check_no_nlp_block(model)
-    if model.uses_nlp_block
+    if model.nlp_data !== nothing
         error("Cannot mix the new and legacy nonlinear APIs")
     end
     return
@@ -631,25 +614,17 @@ end
 # optimize!
 
 function objective_fn(model::Optimizer, evaluator, x::Vector, grad::Vector)
-    # The objective sink of `evaluator` routes between the QP block and the
-    # inner nonlinear model, and evaluates to zero if no objective is set. A
-    # legacy NLPBlock objective is evaluated directly, because the sink does
-    # not know about it.
-    legacy_nlp = model.uses_nlp_block && model.nlp_data.has_objective
-    if length(grad) > 0
-        fill!(grad, 0.0)
-        if model.sense == MOI.FEASIBILITY_SENSE
-            # nothing
-        elseif legacy_nlp
-            MOI.eval_objective_gradient(model.nlp_data.evaluator, grad, x)
-        else
-            MOI.eval_objective_gradient(evaluator, grad, x)
-        end
-    end
+    fill!(grad, 0.0)
     if model.sense == MOI.FEASIBILITY_SENSE
         return 0.0
-    elseif legacy_nlp
-        return MOI.eval_objective(model.nlp_data.evaluator, x)
+    end
+    # A legacy NLPBlock objective takes precedence over the QP objective.
+    nlp_data = model.nlp_data
+    if nlp_data !== nothing && nlp_data.has_objective
+        evaluator = nlp_data.evaluator
+    end
+    if !isempty(grad)
+        MOI.eval_objective_gradient(evaluator, grad, x)
     end
     return MOI.eval_objective(evaluator, x)
 end
@@ -697,21 +672,20 @@ function MOI.optimize!(model::Optimizer)
     model.inner = NLopt.Opt(model.options["algorithm"], num_variables)
     _initialize_options!(model)
     vars = MOI.VariableIndex.(1:num_variables)
-    # Rebuild even when the inner model is empty: a previous solve may have
-    # left a stale `nlp_data` (for example, a nonlinear objective replaced by
-    # a quadratic one).
-    if !model.uses_nlp_block
-        model.nlp_data = MOI.NLPBlockData(
+    # Build a fresh evaluator for the new nonlinear API on each solve.
+    nlp_data = if model.nlp_data === nothing
+        MOI.NLPBlockData(
             MOI.Nonlinear.Evaluator(model.model.inner, model.ad_backend, vars),
         )
+    else
+        model.nlp_data
     end
     # One evaluator for the whole model: the rows of the QP block come first,
-    # followed by the rows of `model.nlp_data`.
-    evaluator =
-        MOI.Nonlinear.EvaluatorWithQuad(model.model, model.nlp_data.evaluator)
+    # followed by the rows of `nlp_data`.
+    evaluator = MOI.Nonlinear.EvaluatorWithQuad(model.model, nlp_data.evaluator)
     constraint_bounds = vcat(
         MOI.NLPBoundsPair.(model.model.qp.g_L, model.model.qp.g_U),
-        model.nlp_data.constraint_bounds,
+        nlp_data.constraint_bounds,
     )
     num_constraints = length(constraint_bounds)
     NLopt.lower_bounds!(model.inner, model.model.variables.lower)
