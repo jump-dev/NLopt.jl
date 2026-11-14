@@ -14,7 +14,7 @@ MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 NLoptMathOptInterfaceExt = ["MathOptInterface"]
 
 [compat]
-CEnum = "0.5"
+CEnum = "0.5, 1"
 MathOptInterface = "1.25"
 NLopt_jll = "2.7"
 julia = "1.10"
