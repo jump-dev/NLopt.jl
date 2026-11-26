@@ -368,8 +368,70 @@ function test_AutomaticDifferentiationBackend()
     attr = MOI.AutomaticDifferentiationBackend()
     @test MOI.supports(model, attr)
     @test MOI.get(model, attr) == MOI.Nonlinear.SparseReverseMode()
+    x = MOI.add_variable(model)
     MOI.set(model, attr, MOI.Nonlinear.ExprGraphOnly())
     @test MOI.get(model, attr) == MOI.Nonlinear.ExprGraphOnly()
+    @test MOI.is_valid(model, x)
+    return
+end
+
+struct _CustomAD <: MOI.Nonlinear.AbstractAutomaticDifferentiation end
+
+function MOI.Nonlinear.model(::_CustomAD)
+    return MOI.Nonlinear.ModelWithOracles(
+        MOI.Nonlinear.ModelWithQuad(MOI.Nonlinear.Model()),
+    )
+end
+
+function MOI.Nonlinear.Evaluator(
+    model::MOI.Nonlinear.Model,
+    ::_CustomAD,
+    vars::Vector{MOI.VariableIndex},
+)
+    return MOI.Nonlinear.Evaluator(
+        model,
+        MOI.Nonlinear.SparseReverseMode(),
+        vars,
+    )
+end
+
+function test_custom_ad_backend()
+    model = NLopt.Optimizer()
+    attr = MOI.AutomaticDifferentiationBackend()
+    default = MOI.get(model, attr)
+    MOI.set(model, attr, _CustomAD())
+    @test MOI.get(model, attr) == _CustomAD()
+    @test MOI.is_empty(model)
+    @test !MOI.supports(model, MOI.NLPBlock())
+    block =
+        MOI.NLPBlockData([], MOI.Test.FeasibilitySenseEvaluator(false), true)
+    @test_throws MOI.UnsupportedAttribute MOI.set(model, MOI.NLPBlock(), block)
+    x = MOI.add_variable(model)
+    bound = MOI.add_constraint(model, x, MOI.GreaterThan(0.5))
+    @test_throws MOI.DeleteNotAllowed MOI.delete(model, bound)
+    c = MOI.add_constraint(model, 1.0 * x * x, MOI.LessThan(9.0))
+    f = MOI.ScalarNonlinearFunction(:log, Any[x])
+    MOI.add_constraint(model, f, MOI.LessThan(log(2.0)))
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+    MOI.set(model, MOI.ObjectiveFunction{typeof(f)}(), f)
+    err = ErrorException(
+        "The automatic-differentiation backend must be set before " *
+        "adding model data.",
+    )
+    @test_throws err MOI.set(model, attr, default)
+    @test MOI.get(model, attr) == _CustomAD()
+    @test MOI.is_valid(model, c)
+    MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), :LD_SLSQP)
+    MOI.optimize!(model)
+    @test MOI.get(model, MOI.TerminationStatus()) == MOI.LOCALLY_SOLVED
+    @test MOI.get(model, MOI.VariablePrimal(), x) ≈ 2.0 atol = 1e-5
+    @test MOI.get(model, MOI.ObjectiveValue()) ≈ log(2.0) atol = 1e-5
+    MOI.empty!(model)
+    @test MOI.is_empty(model)
+    @test MOI.get(model, attr) == _CustomAD()
+    @test model.model isa MOI.Nonlinear.ModelWithOracles
+    MOI.set(model, attr, default)
+    @test MOI.get(model, attr) == default
     return
 end
 
@@ -442,7 +504,9 @@ function test_ListOfSupportedNonlinearOperators()
     @test :sin in ops
     @test !(:f in ops)
     f(x) = x^2
-    MOI.set(model, MOI.UserDefinedFunction(:f, 1), (f,))
+    attr = MOI.UserDefinedFunction(:f, 1)
+    @test MOI.supports(model, attr)
+    MOI.set(model, attr, (f,))
     @test :f in MOI.get(model, MOI.ListOfSupportedNonlinearOperators())
     return
 end

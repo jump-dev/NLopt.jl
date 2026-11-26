@@ -209,6 +209,11 @@ the descriptions below from the specialized NLopt API.
 The `constrtol_abs` parameter is an absolute feasibility tolerance applied to
 all constraints.
 
+For nonlinear expressions built with JuMP's `@objective` and `@constraint`,
+select a custom AD backend with
+`set_attribute(model, MOI.AutomaticDifferentiationBackend(), backend)`.
+Set it before adding model data if the backend uses a different model type.
+
 ## Automatic differentiation
 
 Some algorithms in NLopt require derivatives, which you must manually provide
