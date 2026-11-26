@@ -259,10 +259,6 @@ function MOI.delete(
     model::Optimizer,
     ci::MOI.ConstraintIndex{MOI.VariableIndex},
 )
-    # MOI 1.55.0 does not forward bound deletions through ModelWithQuad.
-    if model.model isa MOI.Nonlinear.ModelWithQuad
-        return MOI.delete(model.model.variables, ci)
-    end
     return MOI.delete(model.model, ci)
 end
 
@@ -272,36 +268,11 @@ function MOI.get(::Optimizer, ::MOI.ListOfConstraintAttributesSet)
     return MOI.AbstractConstraintAttribute[]
 end
 
-function _check_inbounds(model, f::MOI.VariableIndex)
-    return MOI.throw_if_not_valid(model, f)
-end
-
-function _check_inbounds(model, f::MOI.ScalarAffineFunction{Float64})
-    for term in f.terms
-        MOI.throw_if_not_valid(model, term.variable)
-    end
-    return
-end
-
-function _check_inbounds(model, f::MOI.ScalarQuadraticFunction{Float64})
-    for term in f.affine_terms
-        MOI.throw_if_not_valid(model, term.variable)
-    end
-    for term in f.quadratic_terms
-        MOI.throw_if_not_valid(model, term.variable_1)
-        MOI.throw_if_not_valid(model, term.variable_2)
-    end
-    return
-end
-
 function MOI.add_constraint(
     model::Optimizer,
     func::MOI.AbstractFunction,
     set::MOI.AbstractSet,
 )
-    if func isa _QPFunction
-        _check_inbounds(model, func)
-    end
     # Only variable bounds and QP rows can be evaluated alongside an NLPBlock.
     uses_nonlinear_api =
         !(func isa Union{MOI.VariableIndex,_QPFunction} && set isa _ScalarSet)
@@ -389,8 +360,6 @@ function MOI.set(
 ) where {F<:_ObjectiveFunction}
     if F == MOI.ScalarNonlinearFunction
         _check_no_nlp_block(model)
-    else
-        _check_inbounds(model, func)
     end
     MOI.set(model.model, attr, func)
     # NLopt applies the objective sense when registering its callback. Request

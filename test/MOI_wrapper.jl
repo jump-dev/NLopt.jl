@@ -407,7 +407,12 @@ function test_custom_ad_backend()
         MOI.NLPBlockData([], MOI.Test.FeasibilitySenseEvaluator(false), true)
     @test_throws MOI.UnsupportedAttribute MOI.set(model, MOI.NLPBlock(), block)
     x = MOI.add_variable(model)
-    MOI.add_constraint(model, x, MOI.GreaterThan(0.5))
+    lower = MOI.add_constraint(model, x, MOI.GreaterThan(0.5))
+    upper = MOI.add_constraint(model, x, MOI.LessThan(1.0))
+    MOI.delete(model, upper)
+    @test !MOI.is_valid(model, upper)
+    @test MOI.is_valid(model, lower)
+    @test MOI.is_valid(model, x)
     q = 1.0 * x * x
     @test MOI.supports_constraint(model, typeof(q), MOI.Interval{Float64})
     c = MOI.add_constraint(model, q, MOI.Interval(0.0, 9.0))
@@ -433,25 +438,6 @@ function test_custom_ad_backend()
     @test model.model isa MOI.Nonlinear.ModelWithOracles
     MOI.set(model, attr, default)
     @test MOI.get(model, attr) == default
-    return
-end
-
-struct _BoundDeletionAD <: MOI.Nonlinear.AbstractAutomaticDifferentiation end
-
-function MOI.Nonlinear.model(::_BoundDeletionAD)
-    return MOI.Utilities.Model{Float64}()
-end
-
-function test_custom_ad_backend_delete_bound()
-    model = NLopt.Optimizer()
-    MOI.set(model, MOI.AutomaticDifferentiationBackend(), _BoundDeletionAD())
-    x = MOI.add_variable(model)
-    lower = MOI.add_constraint(model, x, MOI.GreaterThan(1.0))
-    upper = MOI.add_constraint(model, x, MOI.LessThan(2.0))
-    MOI.delete(model, upper)
-    @test !MOI.is_valid(model, upper)
-    @test MOI.is_valid(model, lower)
-    @test MOI.is_valid(model, x)
     return
 end
 
