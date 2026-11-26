@@ -113,16 +113,8 @@ const _ScalarSet = Union{
 
 function MOI.supports_constraint(
     model::Optimizer,
-    F::Type{<:_QPFunction},
-    S::Type{<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}}},
-)
-    return MOI.supports_constraint(model.model, F, S)
-end
-
-function MOI.supports_constraint(
-    model::Optimizer,
-    F::Type{<:Union{MOI.VariableIndex,MOI.ScalarNonlinearFunction}},
-    S::Type{<:_ScalarSet},
+    F::Type{<:MOI.AbstractFunction},
+    S::Type{<:MOI.AbstractSet},
 )
     return MOI.supports_constraint(model.model, F, S)
 end
@@ -254,14 +246,6 @@ function MOI.add_variable(model::Optimizer)
     return x
 end
 
-function MOI.add_constraint(
-    model::Optimizer,
-    vi::MOI.VariableIndex,
-    set::_ScalarSet,
-)
-    return MOI.add_constraint(model.model, vi, set)
-end
-
 function MOI.set(
     model::Optimizer,
     attr::MOI.ConstraintSet,
@@ -275,7 +259,7 @@ function MOI.delete(
     model::Optimizer,
     ci::MOI.ConstraintIndex{MOI.VariableIndex},
 )
-    # MOI 1.55 does not forward bound deletions through ModelWithQuad.
+    # MOI 1.55.0 does not forward bound deletions through ModelWithQuad.
     if model.model isa MOI.Nonlinear.ModelWithQuad
         return MOI.delete(model.model.variables, ci)
     end
@@ -312,11 +296,21 @@ end
 
 function MOI.add_constraint(
     model::Optimizer,
-    func::F,
-    set::S,
-) where {F<:_QPFunction,S<:Union{MOI.LessThan{Float64},MOI.EqualTo{Float64}}}
-    _check_inbounds(model, func)
-    return MOI.add_constraint(model.model, func, set)
+    func::MOI.AbstractFunction,
+    set::MOI.AbstractSet,
+)
+    if func isa _QPFunction
+        _check_inbounds(model, func)
+    end
+    # Only variable bounds and QP rows can be evaluated alongside an NLPBlock.
+    uses_nonlinear_api =
+        !(func isa Union{MOI.VariableIndex,_QPFunction} && set isa _ScalarSet)
+    if uses_nonlinear_api
+        _check_no_nlp_block(model)
+    end
+    ci = MOI.add_constraint(model.model, func, set)
+    model.uses_nonlinear_api |= uses_nonlinear_api
+    return ci
 end
 
 # MOI.VariablePrimalStart
@@ -414,17 +408,6 @@ function _check_no_nlp_block(model)
         error("Cannot mix the new and legacy nonlinear APIs")
     end
     return
-end
-
-function MOI.add_constraint(
-    model::Optimizer,
-    f::MOI.ScalarNonlinearFunction,
-    set::_ScalarSet,
-)
-    _check_no_nlp_block(model)
-    ci = MOI.add_constraint(model.model, f, set)
-    model.uses_nonlinear_api = true
-    return ci
 end
 
 ### MOI.AutomaticDifferentiationBackend
@@ -551,8 +534,10 @@ function MOI.optimize!(model::Optimizer)
     NLopt.upper_bounds!(model.inner, variable_bounds.upper)
     equality_indices =
         findall(bound -> bound.lower == bound.upper, constraint_bounds)
-    inequality_indices =
-        findall(bound -> bound.lower != bound.upper, constraint_bounds)
+    inequality_indices = findall(constraint_bounds) do bound
+        return bound.lower != bound.upper &&
+               (bound.lower != -Inf || bound.upper != Inf)
+    end
     # map from eqidx/ineqidx to index in equalities/inequalities
     constrmap = zeros(Int, num_constraints)
     for (i, k) in enumerate(equality_indices)
@@ -568,11 +553,12 @@ function MOI.optimize!(model::Optimizer)
             num_inequalities += 1
         end
     end
+    has_constraints = !isempty(equality_indices) || !isempty(inequality_indices)
     derivative_free = string(model.options["algorithm"])[2] == 'N'
     if derivative_free
         # Derivative free optimizer chosen
         MOI.initialize(evaluator, Symbol[])
-    elseif num_constraints > 0
+    elseif has_constraints
         MOI.initialize(evaluator, [:Grad, :Jac])
     else
         MOI.initialize(evaluator, [:Grad])
@@ -589,7 +575,7 @@ function MOI.optimize!(model::Optimizer)
         )
     end
     Jac_IJ = Tuple{Int,Int}[]
-    if !derivative_free && num_constraints > 0
+    if !derivative_free && has_constraints
         append!(Jac_IJ, MOI.jacobian_structure(evaluator))
     end
     Jac_val = zeros(length(Jac_IJ))
@@ -628,8 +614,8 @@ function MOI.optimize!(model::Optimizer)
             MOI.eval_constraint_jacobian(evaluator, Jac_val, x)
             for ((row, col), val) in zip(Jac_IJ, Jac_val)
                 bounds = constraint_bounds[row]
-                if bounds.lower == bounds.upper
-                    continue  # This is an equality constraint
+                if bounds.lower == bounds.upper || iszero(constrmap[row])
+                    continue  # Equality or unbounded row
                 elseif isinf(bounds.lower)  # upper bound
                     jac[col, constrmap[row]] += val
                 elseif isinf(bounds.upper)  # lower bound
@@ -641,12 +627,10 @@ function MOI.optimize!(model::Optimizer)
             end
         end
         MOI.eval_constraint(evaluator, g_vec, x)
-        for row in 1:num_constraints
+        for row in inequality_indices
             index = constrmap[row]
             bounds = constraint_bounds[row]
-            if bounds.lower == bounds.upper
-                continue  # This is an equality constraint
-            elseif isinf(bounds.lower)  # g(x) <= u --> g(x) - u <= 0
+            if isinf(bounds.lower)  # g(x) <= u --> g(x) - u <= 0
                 result[index] = g_vec[row] - bounds.upper
             elseif isinf(bounds.upper)  # g(x) >= l --> l - g(x) <= 0
                 result[index] = bounds.lower - g_vec[row]
