@@ -209,6 +209,9 @@ the descriptions below from the specialized NLopt API.
 The `constrtol_abs` parameter is an absolute feasibility tolerance applied to
 all constraints.
 
+Select a custom AD backend with
+`set_attribute(model, MOI.AutomaticDifferentiationBackend(), backend)`.
+
 ## Automatic differentiation
 
 Some algorithms in NLopt require derivatives, which you must manually provide
