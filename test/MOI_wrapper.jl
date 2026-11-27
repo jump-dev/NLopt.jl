@@ -292,6 +292,42 @@ function MOI.eval_objective_gradient(::_ObjectiveOnly, grad, x)
     return
 end
 
+function test_NLPBlock_objective_only_evaluator()
+    ext = Base.get_extension(NLopt, :NLoptMathOptInterfaceExt)
+    evaluator = ext._ObjectiveOnlyEvaluator(_ObjectiveOnly())
+    features = MOI.features_available(evaluator)
+    @test Set(features) == Set([:Grad, :Jac, :JacVec])
+    MOI.initialize(evaluator, features)
+    x, v = [2.0], [3.0]
+    @test MOI.eval_objective(evaluator, x) == 8.0
+    grad = [NaN]
+    MOI.eval_objective_gradient(evaluator, grad, x)
+    @test grad == [2.0]
+    Jv = Float64[]
+    MOI.eval_constraint_jacobian_product(evaluator, Jv, x, v)
+    @test isempty(Jv)
+    Jtv = [NaN]
+    MOI.eval_constraint_jacobian_transpose_product(evaluator, Jtv, x, Float64[])
+    @test Jtv == [0.0]
+
+    # Use the legacy objective x^3 to check the two Hessian callbacks.
+    model = MOI.Nonlinear.Model()
+    xi = MOI.VariableIndex(1)
+    MOI.Nonlinear.set_objective(model, :($xi^3))
+    inner =
+        MOI.Nonlinear.Evaluator(model, MOI.Nonlinear.SparseReverseMode(), [xi])
+    evaluator = ext._ObjectiveOnlyEvaluator(inner)
+    MOI.initialize(evaluator, [:Hess, :HessVec])
+    @test MOI.hessian_lagrangian_structure(evaluator) == [(1, 1)]
+    H, Hv = [NaN], [NaN]
+    σ = 4.0
+    MOI.eval_hessian_lagrangian(evaluator, H, x, σ, Float64[])
+    @test H == [48.0]
+    MOI.eval_hessian_lagrangian_product(evaluator, Hv, x, v, σ, Float64[])
+    @test Hv == [144.0]
+    return
+end
+
 function test_NLPBlock_objective_only_with_quadratic_constraint()
     for algorithm in (:LD_SLSQP, :LN_COBYLA)
         model = NLopt.Optimizer()
