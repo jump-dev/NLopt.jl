@@ -960,7 +960,7 @@ export Opt,
     Result
 
 @static if !isdefined(Base, :get_extension)
-    include("../ext/NLoptMathOptInterfaceExt.jl")
+    include("../ext/NLoptMathOptInterfaceExt/NLoptMathOptInterfaceExt.jl")
     using .NLoptMathOptInterfaceExt
     const Optimizer = NLoptMathOptInterfaceExt.Optimizer
 else

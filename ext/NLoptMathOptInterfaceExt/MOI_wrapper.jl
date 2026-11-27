@@ -3,19 +3,6 @@
 # Use of this source code is governed by an MIT-style license that can be found
 # in the LICENSE.md file or at https://opensource.org/licenses/MIT.
 
-module NLoptMathOptInterfaceExt
-
-import MathOptInterface as MOI
-import NLopt
-
-function __init__()
-    # we need to add extension types back to the toplevel module
-    @static if VERSION >= v"1.9"
-        setglobal!(NLopt, :Optimizer, Optimizer)
-    end
-    return
-end
-
 """
     Optimizer()
 
@@ -465,11 +452,6 @@ function objective_fn(model::Optimizer, evaluator, x::Vector, grad::Vector)
     if model.sense == MOI.FEASIBILITY_SENSE
         return 0.0
     end
-    # A legacy NLPBlock objective takes precedence over the QP objective.
-    nlp_data = model.nlp_data
-    if nlp_data !== nothing && nlp_data.has_objective
-        evaluator = nlp_data.evaluator
-    end
     if !isempty(grad)
         MOI.eval_objective_gradient(evaluator, grad, x)
     end
@@ -518,15 +500,16 @@ function MOI.optimize!(model::Optimizer)
     num_variables = length(model.starting_values)
     model.inner = NLopt.Opt(model.options["algorithm"], num_variables)
     _initialize_options!(model)
-    bounds = MOI.Utilities.constraint_bounds(model.model)
-    constraint_bounds = MOI.NLPBoundsPair.(bounds.lower, bounds.upper)
-    evaluator = if model.nlp_data === nothing
+    data = model.nlp_data
+    constraint_bounds = _constraint_bounds(model.model, data)
+    if data === nothing
         vars = MOI.get(model.model, MOI.ListOfVariableIndices())
-        MOI.Nonlinear.Evaluator(model.model, model.ad_backend, vars)
+        evaluator = MOI.Nonlinear.Evaluator(model.model, model.ad_backend, vars)
+        objective_evaluator = evaluator
     else
-        # The legacy evaluator supplies the nonlinear rows after the QP rows.
-        append!(constraint_bounds, model.nlp_data.constraint_bounds)
-        MOI.Nonlinear.EvaluatorWithQuad(model.model, model.nlp_data.evaluator)
+        evaluator = _legacy_evaluator(model.model, data, model.ad_backend)
+        # The legacy objective takes precedence for the duration of this solve.
+        objective_evaluator = data.has_objective ? data.evaluator : evaluator
     end
     num_constraints = length(constraint_bounds)
     variable_bounds = MOI.Utilities.variable_bounds(model.model)
@@ -563,16 +546,11 @@ function MOI.optimize!(model::Optimizer)
     else
         MOI.initialize(evaluator, [:Grad])
     end
+    objective = (x, g) -> objective_fn(model, objective_evaluator, x, g)
     if model.sense == MOI.MAX_SENSE
-        NLopt.max_objective!(
-            model.inner,
-            (x, g) -> objective_fn(model, evaluator, x, g),
-        )
+        NLopt.max_objective!(model.inner, objective)
     else
-        NLopt.min_objective!(
-            model.inner,
-            (x, g) -> objective_fn(model, evaluator, x, g),
-        )
+        NLopt.min_objective!(model.inner, objective)
     end
     Jac_IJ = Tuple{Int,Int}[]
     if !derivative_free && has_constraints
@@ -723,5 +701,3 @@ function MOI.get(
     MOI.throw_if_not_valid(model, ci)
     return MOI.Utilities.get_fallback(model, attr, ci)
 end
-
-end # module

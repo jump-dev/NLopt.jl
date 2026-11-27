@@ -272,6 +272,59 @@ function test_NLPBlock_with_objective()
     return
 end
 
+struct _ObjectiveOnly <: MOI.AbstractNLPEvaluator end
+
+function MOI.features_available(::_ObjectiveOnly)
+    return [:Grad]
+end
+
+function MOI.initialize(d::_ObjectiveOnly, features)
+    @test issubset(features, MOI.features_available(d))
+    return
+end
+
+function MOI.eval_objective(::_ObjectiveOnly, x)
+    return 2 * x[1] + 4
+end
+
+function MOI.eval_objective_gradient(::_ObjectiveOnly, grad, x)
+    grad[1] = 2.0
+    return
+end
+
+function test_NLPBlock_objective_only_with_quadratic_constraint()
+    for algorithm in (:LD_SLSQP, :LN_COBYLA)
+        model = NLopt.Optimizer()
+        MOI.set(model, MOI.RawOptimizerAttribute("algorithm"), algorithm)
+        x = MOI.add_variable(model)
+        MOI.set(model, MOI.VariablePrimalStart(), x, 0.25)
+        MOI.add_constraint(model, 1.0 * x * x, MOI.LessThan(1.0))
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+        f = -1.0 * x
+        attr = MOI.ObjectiveFunction{typeof(f)}()
+        MOI.set(model, attr, f)
+        for (has_objective, x_opt, f_opt) in
+            ((true, 1.0, 6.0), (false, -1.0, 1.0))
+            data = MOI.NLPBlockData([], _ObjectiveOnly(), has_objective)
+            MOI.set(model, MOI.NLPBlock(), data)
+            MOI.optimize!(model)
+            @test MOI.get(model, MOI.TerminationStatus()) == MOI.LOCALLY_SOLVED
+            @test isapprox(
+                MOI.get(model, MOI.VariablePrimal(), x),
+                x_opt;
+                atol = 1e-4,
+            )
+            @test isapprox(
+                MOI.get(model, MOI.ObjectiveValue()),
+                f_opt;
+                atol = 1e-4,
+            )
+            @test isapprox(MOI.get(model, attr), f)
+        end
+    end
+    return
+end
+
 function test_NLPBlock_mix_apis()
     for setter in (
         (model, x) -> MOI.set(
